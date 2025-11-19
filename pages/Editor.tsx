@@ -1,12 +1,14 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Save, Upload, Sparkles, Eye, EyeOff, Bold, Italic, Heading, Quote, Code, List, Link as LinkIcon, Image as ImageIcon, Terminal, X, Wand2 } from 'lucide-react';
+import { Save, Upload, Sparkles, Eye, EyeOff, Bold, Italic, Heading, Quote, Code, List, Link as LinkIcon, Image as ImageIcon, Terminal, X, Wand2, ArrowLeft } from 'lucide-react';
 import { enhanceContent, generateSummary } from '../services/geminiService';
 import { marked } from 'marked';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useNavigate } from 'react-router-dom';
 
 const Editor: React.FC = () => {
   const { t } = useLanguage();
+  const navigate = useNavigate();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState(`# Welcome to the Editor
 
@@ -247,11 +249,10 @@ Start writing your knowledge here.
   };
 
   const handleFinalPublish = () => {
-    // Here you would construct the full article object including
-    // title, content, summary, coverImage, category, tags, price, etc.
     console.log("Publishing:", { title, summary, category, tags, coverImage, price, isPaid });
     alert(t('editor.published'));
     setShowPublishModal(false);
+    navigate('/admin'); // Go back to admin
   };
 
   // Sync scroll when content updates to ensure heights are correct for calculation
@@ -261,20 +262,25 @@ Start writing your knowledge here.
   }, [content, showPreview]);
 
   return (
-    <div className="h-[calc(100vh-80px)] flex flex-col bg-slate-50">
+    <div className="h-screen flex flex-col bg-slate-50">
       {/* Hidden Inputs */}
       <input type="file" ref={imageInputRef} onChange={handleImageInput} accept="image/*" className="hidden" />
       <input type="file" ref={coverInputRef} onChange={handleCoverUpload} accept="image/*" className="hidden" />
 
       {/* Top Bar */}
       <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shrink-0 z-20 relative shadow-sm">
-        <input 
-          type="text" 
-          placeholder={t('editor.placeholderTitle')}
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className="text-xl font-bold text-slate-900 placeholder-slate-300 outline-none flex-1 bg-transparent mr-8"
-        />
+        <div className="flex items-center gap-4 flex-1 mr-8">
+          <button onClick={() => navigate('/admin')} className="text-slate-500 hover:text-slate-800 p-2 rounded-lg hover:bg-slate-50">
+             <ArrowLeft size={20} />
+          </button>
+          <input 
+            type="text" 
+            placeholder={t('editor.placeholderTitle')}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="text-xl font-bold text-slate-900 placeholder-slate-300 outline-none flex-1 bg-transparent"
+          />
+        </div>
         
         <div className="flex items-center gap-3">
           <div className="hidden lg:flex items-center gap-4 mr-4 text-xs text-slate-400 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">

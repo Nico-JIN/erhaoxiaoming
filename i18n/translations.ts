@@ -9,8 +9,26 @@ export const translations = {
       login: "Log in",
       getStarted: "Get Started",
       search: "Search knowledge...",
-      adminCreate: "Admin Create",
+      adminCreate: "Admin Dashboard",
       points: "Pts"
+    },
+    admin: {
+      dashboard: "Dashboard",
+      users: "User Management",
+      content: "Content & Editor",
+      finance: "Finance & Recharge",
+      categories: "Categories",
+      logs: "System Logs",
+      totalUsers: "Total Users",
+      totalRevenue: "Total Revenue",
+      articles: "Articles",
+      newArticle: "New Article",
+      recentTrans: "Recent Transactions",
+      status: "Status",
+      actions: "Actions",
+      edit: "Edit",
+      delete: "Delete",
+      view: "View"
     },
     home: {
       heroTag: "Knowledge Monetization Reimagined",
@@ -18,7 +36,7 @@ export const translations = {
       heroTitle2: "Earn Real Value.",
       heroDesc: "A decentralized-ready platform for creators to publish insights, manage paid digital assets, and build a loyal community with a points-based economy.",
       btnExplore: "Explore Content",
-      btnWrite: "Start Writing",
+      btnJoin: "Join Community",
       trendingTitle: "Trending Knowledge",
       viewAll: "View All",
       card1Title: "Advanced System Architecture",
@@ -90,7 +108,8 @@ export const translations = {
       confirmPublish: "Confirm Publish",
       cancel: "Cancel",
       aiGenerate: "AI Generate",
-      generating: "Generating..."
+      generating: "Generating...",
+      backToAdmin: "Back to Admin"
     },
     article: {
       premiumContent: "Premium Content",
@@ -131,8 +150,26 @@ export const translations = {
       login: "登录",
       getStarted: "开始使用",
       search: "搜索知识...",
-      adminCreate: "管理发布",
+      adminCreate: "后台管理",
       points: "积分"
+    },
+    admin: {
+      dashboard: "仪表盘",
+      users: "用户管理",
+      content: "作品管理",
+      finance: "充值管理",
+      categories: "栏目管理",
+      logs: "操作日志",
+      totalUsers: "总用户数",
+      totalRevenue: "总收入",
+      articles: "文章数量",
+      newArticle: "新建文章",
+      recentTrans: "近期交易",
+      status: "状态",
+      actions: "操作",
+      edit: "编辑",
+      delete: "删除",
+      view: "查看"
     },
     home: {
       heroTag: "知识变现新定义",
@@ -140,7 +177,7 @@ export const translations = {
       heroTitle2: "创造价值",
       heroDesc: "一个去中心化的知识平台，支持创作者发布见解、管理数字资产，通过积分经济体系构建忠实社区。",
       btnExplore: "浏览内容",
-      btnWrite: "开始创作",
+      btnJoin: "加入社区",
       trendingTitle: "热门知识",
       viewAll: "查看全部",
       card1Title: "高并发系统架构进阶",
@@ -212,7 +249,8 @@ export const translations = {
       confirmPublish: "确认发布",
       cancel: "取消",
       aiGenerate: "AI 生成",
-      generating: "生成中..."
+      generating: "生成中...",
+      backToAdmin: "返回管理后台"
     },
     article: {
       premiumContent: "付费内容",
@@ -253,8 +291,26 @@ export const translations = {
       login: "ログイン",
       getStarted: "始める",
       search: "知識を検索...",
-      adminCreate: "管理者作成",
+      adminCreate: "管理ダッシュボード",
       points: "pt"
+    },
+    admin: {
+      dashboard: "ダッシュボード",
+      users: "ユーザー管理",
+      content: "コンテンツ管理",
+      finance: "財務管理",
+      categories: "カテゴリ管理",
+      logs: "システムログ",
+      totalUsers: "総ユーザー",
+      totalRevenue: "総収益",
+      articles: "記事数",
+      newArticle: "新規記事",
+      recentTrans: "最近の取引",
+      status: "ステータス",
+      actions: "アクション",
+      edit: "編集",
+      delete: "削除",
+      view: "表示"
     },
     home: {
       heroTag: "知識の収益化を再定義",
@@ -262,7 +318,7 @@ export const translations = {
       heroTitle2: "価値を創造。",
       heroDesc: "クリエイターが洞察を発表し、デジタル資産を管理し、ポイント経済でコミュニティを構築するための分散型プラットフォーム。",
       btnExplore: "コンテンツを見る",
-      btnWrite: "執筆を開始",
+      btnJoin: "コミュニティに参加",
       trendingTitle: "注目の知識",
       viewAll: "すべて見る",
       card1Title: "大規模アプリケーションのためのシステム設計",
@@ -334,7 +390,8 @@ export const translations = {
       confirmPublish: "公開を確認",
       cancel: "キャンセル",
       aiGenerate: "AI生成",
-      generating: "生成中..."
+      generating: "生成中...",
+      backToAdmin: "管理画面へ戻る"
     },
     article: {
       premiumContent: "プレミアムコンテンツ",
@@ -375,8 +432,26 @@ export const translations = {
       login: "로그인",
       getStarted: "시작하기",
       search: "지식 검색...",
-      adminCreate: "관리자 작성",
+      adminCreate: "관리자 대시보드",
       points: "Pts"
+    },
+    admin: {
+      dashboard: "대시보드",
+      users: "사용자 관리",
+      content: "콘텐츠 관리",
+      finance: "재무 관리",
+      categories: "카테고리 관리",
+      logs: "시스템 로그",
+      totalUsers: "총 사용자",
+      totalRevenue: "총 수익",
+      articles: "게시글 수",
+      newArticle: "새 게시글",
+      recentTrans: "최근 거래",
+      status: "상태",
+      actions: "작업",
+      edit: "편집",
+      delete: "삭제",
+      view: "보기"
     },
     home: {
       heroTag: "지식 수익화의 재정의",
@@ -384,7 +459,7 @@ export const translations = {
       heroTitle2: "가치를 창출하세요.",
       heroDesc: "창작자가 통찰력을 게시하고, 디지털 자산을 관리하며, 포인트 기반 경제로 충성도 높은 커뮤니티를 구축할 수 있는 분산형 플랫폼입니다.",
       btnExplore: "콘텐츠 탐색",
-      btnWrite: "글쓰기 시작",
+      btnJoin: "커뮤니티 참여",
       trendingTitle: "인기 지식",
       viewAll: "모두 보기",
       card1Title: "대규모 애플리케이션을 위한 시스템 아키텍처",
@@ -456,7 +531,8 @@ export const translations = {
       confirmPublish: "게시 확인",
       cancel: "취소",
       aiGenerate: "AI 생성",
-      generating: "생성 중..."
+      generating: "생성 중...",
+      backToAdmin: "관리자로 돌아가기"
     },
     article: {
       premiumContent: "프리미엄 콘텐츠",
