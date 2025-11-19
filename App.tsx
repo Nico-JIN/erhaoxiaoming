@@ -1,16 +1,18 @@
 
 import React, { useState } from 'react';
-import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate, useNavigate, Outlet } from 'react-router-dom';
 import { User, UserRole } from './types';
 import AuthModal from './components/AuthModal';
 import Home from './pages/Home';
 import Editor from './pages/Editor';
 import ArticleView from './pages/ArticleView';
 import Pricing from './pages/Pricing';
-import { Bell, User as UserIcon, Search, Wallet, ShieldCheck, Globe } from 'lucide-react';
+import AdminPanel from './pages/AdminPanel';
+import { Search, Wallet, Globe } from 'lucide-react';
 import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
 import { Language } from './i18n/translations';
 
+// --- User Navbar ---
 const Navbar: React.FC<{ user: User | null, onLoginClick: () => void }> = ({ user, onLoginClick }) => {
   const navigate = useNavigate();
   const { t, language, setLanguage } = useLanguage();
@@ -71,8 +73,7 @@ const Navbar: React.FC<{ user: User | null, onLoginClick: () => void }> = ({ use
         {user ? (
           <div className="flex items-center gap-4">
             {user.role === UserRole.ADMIN && (
-              <button onClick={() => navigate('/editor')} className="hidden md:flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-800 transition shadow-lg shadow-slate-200">
-                <ShieldCheck size={16} />
+              <button onClick={() => navigate('/admin')} className="hidden md:flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-800 transition shadow-lg shadow-slate-200">
                 {t('nav.adminCreate')}
               </button>
             )}
@@ -98,6 +99,15 @@ const Navbar: React.FC<{ user: User | null, onLoginClick: () => void }> = ({ use
   );
 };
 
+const UserLayout: React.FC<{ user: User | null, onLoginOpen: () => void }> = ({ user, onLoginOpen }) => {
+  return (
+    <div className="min-h-screen bg-[#f8fafc]">
+      <Navbar user={user} onLoginClick={onLoginOpen} />
+      <Outlet />
+    </div>
+  );
+};
+
 const AppContent: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthModalOpen, setAuthModalOpen] = useState(false);
@@ -114,14 +124,11 @@ const AppContent: React.FC = () => {
       unlockedArticles: []
     });
     setAuthModalOpen(false);
+    if (isAdmin) navigate('/admin');
   };
 
   const handleNavigate = (page: string) => {
     if (page === 'view') navigate('/article/1');
-    else if (page === 'editor') {
-      if (user?.role === UserRole.ADMIN) navigate('/editor');
-      else alert("Only Admins can access the editor.");
-    }
     else navigate('/');
   };
 
@@ -145,21 +152,18 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc]">
-      <Navbar user={user} onLoginClick={() => setAuthModalOpen(true)} />
-      
+    <>
       <Routes>
-        <Route path="/" element={<Home onNavigate={handleNavigate} />} />
-        <Route path="/pricing" element={<Pricing onRecharge={handleRecharge} />} />
-        <Route 
-          path="/editor" 
-          element={
-            user && user.role === UserRole.ADMIN 
-              ? <Editor /> 
-              : <Navigate to="/" replace />
-          } 
-        />
-        <Route path="/article/:id" element={<ArticleView user={user} onPurchase={handlePurchase} />} />
+        {/* Public / User Routes */}
+        <Route element={<UserLayout user={user} onLoginOpen={() => setAuthModalOpen(true)} />}>
+           <Route path="/" element={<Home onNavigate={handleNavigate} />} />
+           <Route path="/pricing" element={<Pricing onRecharge={handleRecharge} />} />
+           <Route path="/article/:id" element={<ArticleView user={user} onPurchase={handlePurchase} />} />
+        </Route>
+
+        {/* Admin Routes */}
+        <Route path="/admin" element={user && user.role === UserRole.ADMIN ? <AdminPanel /> : <Navigate to="/" />} />
+        <Route path="/admin/editor" element={user && user.role === UserRole.ADMIN ? <Editor /> : <Navigate to="/" />} />
       </Routes>
 
       <AuthModal 
@@ -167,7 +171,7 @@ const AppContent: React.FC = () => {
         onClose={() => setAuthModalOpen(false)} 
         onLogin={handleLogin}
       />
-    </div>
+    </>
   );
 };
 

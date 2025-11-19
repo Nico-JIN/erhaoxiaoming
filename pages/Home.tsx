@@ -30,8 +30,8 @@ const Home: React.FC<HomeProps> = ({ onNavigate }) => {
              <button onClick={() => onNavigate('view')} className="px-8 py-3.5 bg-indigo-600 text-white rounded-full font-semibold shadow-lg shadow-indigo-200 hover:bg-indigo-700 hover:scale-105 transition-all duration-200">
                {t('home.btnExplore')}
              </button>
-             <button onClick={() => onNavigate('editor')} className="px-8 py-3.5 bg-white text-slate-700 border border-slate-200 rounded-full font-semibold hover:bg-slate-50 transition-all duration-200">
-               {t('home.btnWrite')}
+             <button onClick={() => onNavigate('pricing')} className="px-8 py-3.5 bg-white text-slate-700 border border-slate-200 rounded-full font-semibold hover:bg-slate-50 transition-all duration-200">
+               {t('home.btnJoin')}
              </button>
            </div>
         </div>
