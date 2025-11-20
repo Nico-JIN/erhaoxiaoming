@@ -5,12 +5,28 @@ export const translations = {
   en: {
     nav: {
       explore: "Explore",
+      resources: "Resources",
       pricing: "Pricing",
       login: "Log in",
       getStarted: "Get Started",
       search: "Search knowledge...",
       adminCreate: "Admin Dashboard",
       points: "Pts"
+    },
+    resources: {
+      title: "Knowledge Library",
+      shelf: "Virtual Shelf",
+      search: "Search resources...",
+      download: "Download",
+      locked: "Locked",
+      preview: "Preview",
+      cats: {
+        engineering: "Engineering",
+        design: "Design",
+        business: "Business",
+        productivity: "Productivity",
+        ai: "Artificial Intelligence"
+      }
     },
     admin: {
       dashboard: "Dashboard",
@@ -146,12 +162,28 @@ export const translations = {
   zh: {
     nav: {
       explore: "探索",
+      resources: "资源库",
       pricing: "会员",
       login: "登录",
       getStarted: "开始使用",
       search: "搜索知识...",
       adminCreate: "后台管理",
       points: "积分"
+    },
+    resources: {
+      title: "知识资源库",
+      shelf: "虚拟书架",
+      search: "搜索资源...",
+      download: "下载",
+      locked: "锁定",
+      preview: "预览",
+      cats: {
+        engineering: "工程技术",
+        design: "设计创意",
+        business: "商业管理",
+        productivity: "效率工具",
+        ai: "人工智能"
+      }
     },
     admin: {
       dashboard: "仪表盘",
@@ -287,12 +319,28 @@ export const translations = {
   ja: {
     nav: {
       explore: "探索",
+      resources: "リソース",
       pricing: "料金",
       login: "ログイン",
       getStarted: "始める",
       search: "知識を検索...",
       adminCreate: "管理ダッシュボード",
       points: "pt"
+    },
+    resources: {
+      title: "ナレッジライブラリ",
+      shelf: "バーチャル本棚",
+      search: "リソースを検索...",
+      download: "ダウンロード",
+      locked: "ロック中",
+      preview: "プレビュー",
+      cats: {
+        engineering: "エンジニアリング",
+        design: "デザイン",
+        business: "ビジネス",
+        productivity: "生産性",
+        ai: "AI・人工知能"
+      }
     },
     admin: {
       dashboard: "ダッシュボード",
@@ -428,12 +476,28 @@ export const translations = {
   ko: {
     nav: {
       explore: "탐색",
+      resources: "자료실",
       pricing: "요금제",
       login: "로그인",
       getStarted: "시작하기",
       search: "지식 검색...",
       adminCreate: "관리자 대시보드",
       points: "Pts"
+    },
+    resources: {
+      title: "지식 자료실",
+      shelf: "가상 서재",
+      search: "자료 검색...",
+      download: "다운로드",
+      locked: "잠김",
+      preview: "미리보기",
+      cats: {
+        engineering: "엔지니어링",
+        design: "디자인",
+        business: "비즈니스",
+        productivity: "생산성",
+        ai: "인공지능"
+      }
     },
     admin: {
       dashboard: "대시보드",

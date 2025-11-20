@@ -8,6 +8,7 @@ import Editor from './pages/Editor';
 import ArticleView from './pages/ArticleView';
 import Pricing from './pages/Pricing';
 import AdminPanel from './pages/AdminPanel';
+import Resources from './pages/Resources';
 import { Search, Wallet, Globe } from 'lucide-react';
 import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
 import { Language } from './i18n/translations';
@@ -33,6 +34,7 @@ const Navbar: React.FC<{ user: User | null, onLoginClick: () => void }> = ({ use
         
         <div className="hidden md:flex items-center gap-8 font-medium text-slate-600">
           <span onClick={() => navigate('/')} className="text-base hover:text-indigo-600 cursor-pointer transition-colors">{t('nav.explore')}</span>
+          <span onClick={() => navigate('/resources')} className="text-base hover:text-indigo-600 cursor-pointer transition-colors">{t('nav.resources')}</span>
           <span onClick={() => navigate('/pricing')} className="text-base hover:text-indigo-600 cursor-pointer transition-colors">{t('nav.pricing')}</span>
         </div>
       </div>
@@ -157,6 +159,7 @@ const AppContent: React.FC = () => {
         {/* Public / User Routes */}
         <Route element={<UserLayout user={user} onLoginOpen={() => setAuthModalOpen(true)} />}>
            <Route path="/" element={<Home onNavigate={handleNavigate} />} />
+           <Route path="/resources" element={<Resources />} />
            <Route path="/pricing" element={<Pricing onRecharge={handleRecharge} />} />
            <Route path="/article/:id" element={<ArticleView user={user} onPurchase={handlePurchase} />} />
         </Route>
