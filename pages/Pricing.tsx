@@ -1,14 +1,60 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Check, Zap, Crown, Star } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useAuth } from '../contexts/AuthContext';
+import PaymentModal from '../components/PaymentModal';
+import rechargeService, { RechargePlan } from '../services/rechargeService';
 
-interface PricingProps {
-  onRecharge: (amount: number) => void;
-}
-
-const Pricing: React.FC<PricingProps> = ({ onRecharge }) => {
+const Pricing: React.FC = () => {
   const { t } = useLanguage();
+  const { user, refreshUser, applyUserPatch } = useAuth();
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState(0);
+  const [paymentPoints, setPaymentPoints] = useState(0);
+  const [paymentPlan, setPaymentPlan] = useState('');
+  const [paymentPlanId, setPaymentPlanId] = useState<number | undefined>();
+  const [plans, setPlans] = useState<RechargePlan[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadPlans();
+  }, []);
+
+  const loadPlans = async () => {
+    try {
+      setLoading(true);
+      const data = await rechargeService.getPlans();
+      setPlans(data.sort((a, b) => a.order - b.order));
+    } catch (error) {
+      console.error('Failed to load plans:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRecharge = async (planId: number, points: number, amount: number, plan: string) => {
+    if (!user) {
+      window.dispatchEvent(new CustomEvent('open-auth-modal'));
+      return;
+    }
+
+    // Open payment modal
+    setPaymentPlanId(planId);
+    setPaymentPoints(points);
+    setPaymentAmount(amount);
+    setPaymentPlan(plan);
+    setShowPaymentModal(true);
+  };
+
+  const handlePaymentComplete = async () => {
+    setShowPaymentModal(false);
+    setLoadingPlan(null);
+    
+    // 刷新用户信息
+    await refreshUser();
+  };
 
   return (
     <div className="min-h-[calc(100vh-80px)] py-12 px-4">
@@ -19,88 +65,92 @@ const Pricing: React.FC<PricingProps> = ({ onRecharge }) => {
         </p>
       </div>
 
-      <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-8 items-start">
-        
-        {/* Monthly Plan */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 hover:shadow-lg transition-all duration-300">
-          <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-slate-600 mb-6">
-            <Zap size={24} />
-          </div>
-          <h3 className="text-xl font-bold text-slate-900 mb-2">{t('pricing.monthly')}</h3>
-          <div className="flex items-baseline gap-1 mb-6">
-            <span className="text-4xl font-bold text-slate-900">{t('pricing.monthlyPrice')}</span>
-          </div>
-          <p className="text-sm text-slate-500 mb-8">{t('pricing.monthlyDesc')}</p>
-          
-          <button 
-            onClick={() => onRecharge(500)}
-            className="w-full py-3 border border-slate-200 text-slate-700 font-semibold rounded-xl hover:bg-slate-50 transition-colors mb-8"
-          >
-            {t('pricing.getPoints', { amount: 500 })}
-          </button>
-
-          <ul className="space-y-4">
-            <FeatureItem text={t('pricing.features.standard')} />
-            <FeatureItem text={t('pricing.features.instant500')} />
-            <FeatureItem text={t('pricing.features.adFree')} />
-          </ul>
+      {loading ? (
+        <div className="flex justify-center items-center py-20">
+          <div className="animate-spin w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full"></div>
         </div>
-
-        {/* Yearly Plan (Highlighted) */}
-        <div className="bg-indigo-600 rounded-2xl shadow-xl p-8 transform md:-translate-y-4 relative overflow-hidden">
-          <div className="absolute top-0 right-0 bg-white/10 px-4 py-1 rounded-bl-xl text-white text-xs font-bold">
-            {t('pricing.bestValue')}
-          </div>
-          <div className="w-12 h-12 bg-indigo-500 rounded-xl flex items-center justify-center text-white mb-6">
-            <Crown size={24} />
-          </div>
-          <h3 className="text-xl font-bold text-white mb-2">{t('pricing.yearly')}</h3>
-          <div className="flex items-baseline gap-1 mb-6">
-            <span className="text-4xl font-bold text-white">{t('pricing.yearlyPrice')}</span>
-          </div>
-          <p className="text-sm text-indigo-100 mb-8">{t('pricing.yearlyDesc')}</p>
-          
-          <button 
-            onClick={() => onRecharge(3000)}
-            className="w-full py-3 bg-white text-indigo-600 font-bold rounded-xl hover:bg-indigo-50 transition-colors shadow-lg mb-8"
-          >
-             {t('pricing.getPoints', { amount: 3000 })}
-          </button>
-
-          <ul className="space-y-4 text-indigo-100">
-            <FeatureItem text={t('pricing.features.instant3000')} inverted />
-            <FeatureItem text={t('pricing.features.allResources')} inverted />
-            <FeatureItem text={t('pricing.features.priority')} inverted />
-            <FeatureItem text={t('pricing.features.verified')} inverted />
-          </ul>
+      ) : plans.length === 0 ? (
+        <div className="text-center py-20 text-slate-500">
+          <p>暂无可用的充值套餐</p>
         </div>
+      ) : (
+        <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-8 items-start">
+          {plans.map((plan, index) => {
+            const isHighlighted = plan.is_featured;
+            const iconMap: Record<string, any> = {
+              monthly: Zap,
+              quarterly: Star,
+              yearly: Crown,
+            };
+            const Icon = iconMap[plan.plan_type] || Zap;
+            const features = plan.features ? JSON.parse(plan.features) : [];
 
-        {/* Quarterly Plan */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 hover:shadow-lg transition-all duration-300">
-          <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 mb-6">
-            <Star size={24} />
-          </div>
-          <h3 className="text-xl font-bold text-slate-900 mb-2">{t('pricing.quarterly')}</h3>
-          <div className="flex items-baseline gap-1 mb-6">
-            <span className="text-4xl font-bold text-slate-900">{t('pricing.quarterlyPrice')}</span>
-          </div>
-          <p className="text-sm text-slate-500 mb-8">{t('pricing.quarterlyDesc')}</p>
-          
-          <button 
-            onClick={() => onRecharge(1200)}
-            className="w-full py-3 border border-slate-200 text-slate-700 font-semibold rounded-xl hover:bg-slate-50 transition-colors mb-8"
-          >
-             {t('pricing.getPoints', { amount: 1200 })}
-          </button>
+            return (
+              <div
+                key={plan.id}
+                className={`rounded-2xl shadow-sm p-8 hover:shadow-lg transition-all duration-300 ${
+                  isHighlighted
+                    ? 'bg-indigo-600 transform md:-translate-y-4 relative overflow-hidden shadow-xl'
+                    : 'bg-white border border-slate-200'
+                }`}
+              >
+                {isHighlighted && (
+                  <div className="absolute top-0 right-0 bg-white/10 px-4 py-1 rounded-bl-xl text-white text-xs font-bold">
+                    {t('pricing.bestValue')}
+                  </div>
+                )}
+                <div
+                  className={`w-12 h-12 rounded-xl flex items-center justify-center mb-6 ${
+                    isHighlighted ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  <Icon size={24} />
+                </div>
+                <h3 className={`text-xl font-bold mb-2 ${isHighlighted ? 'text-white' : 'text-slate-900'}`}>
+                  {plan.name}
+                </h3>
+                <div className="flex items-baseline gap-1 mb-6">
+                  <span className={`text-4xl font-bold ${isHighlighted ? 'text-white' : 'text-slate-900'}`}>
+                    ￥{(plan.price / 100).toFixed(2)}
+                  </span>
+                </div>
+                <p className={`text-sm mb-8 ${isHighlighted ? 'text-indigo-100' : 'text-slate-500'}`}>
+                  {plan.description}
+                </p>
 
-          <ul className="space-y-4">
-            <FeatureItem text={t('pricing.features.instant1200')} />
-            <FeatureItem text={t('pricing.features.video')} />
-            <FeatureItem text={t('pricing.features.community')} />
-          </ul>
+                <button
+                  onClick={() => handleRecharge(plan.id, plan.points, plan.price, plan.name)}
+                  disabled={loadingPlan === plan.plan_type}
+                  className={`w-full py-3 font-semibold rounded-xl transition-colors mb-8 disabled:opacity-70 ${
+                    isHighlighted
+                      ? 'bg-white text-indigo-600 hover:bg-indigo-50 font-bold shadow-lg'
+                      : 'border border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  {loadingPlan === plan.plan_type ? 'Processing…' : `获取 ${plan.points} 积分`}
+                </button>
+
+                <ul className={`space-y-4 ${isHighlighted ? 'text-indigo-100' : ''}`}>
+                  {features.map((feature: string, idx: number) => (
+                    <FeatureItem key={idx} text={feature} inverted={isHighlighted} />
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
         </div>
+      )}
 
-      </div>
+      {/* Payment Modal */}
+      <PaymentModal
+        isOpen={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        onPaymentComplete={handlePaymentComplete}
+        amount={paymentAmount}
+        points={paymentPoints}
+        plan={paymentPlan}
+        planId={paymentPlanId}
+      />
     </div>
   );
 };

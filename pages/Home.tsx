@@ -1,20 +1,40 @@
 
-import React, { useState, useRef } from 'react';
-import { Sparkles, TrendingUp, Lock, ChevronRight, ArrowRight, Image as ImageIcon, Edit3, Unlock, Save, Clock, BookOpen } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Sparkles,
+  TrendingUp,
+  Lock,
+  ChevronRight,
+  ArrowRight,
+  Unlock,
+  Clock,
+  BookOpen,
+  Save,
+  RefreshCw,
+  Sun,
+  Cloud,
+  CloudRain,
+  Snowflake,
+  CloudFog,
+  MapPin,
+  Droplets,
+  Wind,
+  Quote,
+  Calendar,
+  MoveRight,
+  Info
+} from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
+import resourceService, { Resource } from '../services/resourceService';
+import dailyInsightService, { DailyInsightSnapshot, LOCALE_BY_LANGUAGE, getFallbackDailySnapshot } from '../services/dailyInsightService';
 
-interface HomeProps {
-  onNavigate: (page: string) => void;
-}
-
-// Define Page Types
-type ContentType = 'cover' | 'title' | 'text' | 'image' | 'blank' | 'copyright';
+type ContentType = 'cover' | 'intro' | 'day' | 'blank';
 
 interface PageContent {
   type: ContentType;
-  title?: string;
-  content?: string;
-  image?: string;
+  data?: any;
+  day?: number;
 }
 
 interface BookSheet {
@@ -23,349 +43,542 @@ interface BookSheet {
   back: PageContent;
 }
 
-const TOTAL_SHEETS = 10; // 20 Pages total
+const CATEGORY_TAG_STYLES: Record<string, string> = {
+  engineering: 'bg-indigo-500 text-white',
+  ai: 'bg-blue-500 text-white',
+  design: 'bg-pink-500 text-white',
+  business: 'bg-emerald-500 text-white',
+  productivity: 'bg-slate-900 text-white',
+};
 
-// Mock Data for Trending Cards
-const TRENDING_ITEMS = [
-  { id: 1, title: "High-Scale Architecture", category: "Architecture", points: 100, image: "https://picsum.photos/id/42/600/400", author: "Alex Chen", date: "Oct 24" },
-  { id: 2, title: "Personal Knowledge Mgmt", category: "Productivity", points: 0, image: "https://picsum.photos/id/20/600/400", author: "Sarah W.", date: "2d ago" },
-  { id: 3, title: "Building LLM Apps", category: "AI & LLM", points: 50, image: "https://picsum.photos/id/3/600/400", author: "Dev Mike", date: "5h ago" },
-  { id: 4, title: "The Art of UI Design", category: "Design", points: 150, image: "https://picsum.photos/id/180/600/400", author: "Lisa Ray", date: "1d ago" },
-  { id: 5, title: "Rust for Web Devs", category: "Engineering", points: 80, image: "https://picsum.photos/id/1/600/400", author: "Tom B.", date: "3h ago" },
-  { id: 6, title: "Growth Hacking 101", category: "Business", points: 0, image: "https://picsum.photos/id/6/600/400", author: "Jenny K.", date: "1w ago" },
+const WEATHER_ICONS: Record<string, typeof Sun> = {
+  sun: Sun,
+  cloud: Cloud,
+  rain: CloudRain,
+  snow: Snowflake,
+  fog: CloudFog
+};
+
+// Random gradient backgrounds for "beautiful design"
+const PAGE_GRADIENTS = [
+  'bg-gradient-to-br from-orange-50 to-amber-50',
+  'bg-gradient-to-br from-indigo-50 to-blue-50',
+  'bg-gradient-to-br from-emerald-50 to-teal-50',
+  'bg-gradient-to-br from-rose-50 to-pink-50',
+  'bg-gradient-to-br from-slate-50 to-gray-50',
 ];
 
-const Home: React.FC<HomeProps> = ({ onNavigate }) => {
-  const { t } = useLanguage();
-  const bookRef = useRef<HTMLDivElement>(null);
+const buildMonthlySheets = (
+  year: number,
+  month: number,
+  insights: DailyInsightSnapshot[],
+  t: (key: string) => string
+): BookSheet[] => {
+  const sheets: BookSheet[] = [];
+  const totalDays = insights.length;
   
-  // 0 = Closed (Cover), 1 = Fully Open (Back Cover). 0.5 = Middle Spread.
-  const [flipProgress, setFlipProgress] = useState(0); 
-  const [isLocked, setIsLocked] = useState(false);
-
-  // Initialize Sheets (Front and Back for each)
-  const [sheets, setSheets] = useState<BookSheet[]>(() => {
-     return Array.from({ length: TOTAL_SHEETS }, (_, i) => {
-        const sheet: BookSheet = { id: i, front: { type: 'blank' }, back: { type: 'blank' } };
-        
-        // Configuration of the book content
-        if (i === 0) {
-            sheet.front = { type: 'cover' }; // The Cover
-            sheet.back = { type: 'blank', content: 'Ex Libris Lumina' }; // Inner Cover
-        } else if (i === 1) {
-            sheet.front = { type: 'title', title: "THE\nDIGITAL\nRENAISSANCE", content: "By Lumina Creators" };
-            sheet.back = { type: 'copyright', content: "© 2024 Lumina Platform.\nAll rights reserved." };
-        } else if (i === 2) {
-            sheet.front = { type: 'text', title: 'Introduction', content: "Knowledge is not static. It breathes, evolves, and compounds. In this era, your insights are assets." };
-            sheet.back = { type: 'image', content: "Visual Architecture" };
-        } else if (i === 3) {
-            sheet.front = { type: 'text', title: 'Chapter I', content: "The foundation of any great system lies in its ability to adapt. We build not for today, but for the unknown tomorrow." };
-            sheet.back = { type: 'text', title: 'Notes', content: "Complexity is the enemy of execution." };
-        } else {
-             sheet.front = { type: 'text', title: `Page ${i*2+1}`, content: "Start writing your thoughts here..." };
-             sheet.back = { type: 'text', title: `Page ${i*2+2}`, content: "More insights..." };
-        }
-        return sheet;
-     });
+  // Sheet 0: Cover + Intro
+  sheets.push({
+    id: 0,
+    front: { 
+      type: 'cover', 
+      data: { 
+        month, 
+        year, 
+        title: t('home.calendar.title') || 'Lemind Almanac' 
+      } 
+    },
+    back: { 
+      type: 'intro',
+      data: {
+        summary: t('home.calendar.subtitle') || 'Daily wisdom for makers.',
+        location: insights[0]?.location
+      }
+    }
   });
 
+  // Daily Sheets
+  // Each sheet holds 2 days: Front (Day N), Back (Day N+1) -> Wait.
+  // Standard book: 
+  // Sheet 0 Front (Cover)
+  // Sheet 0 Back (Left) / Sheet 1 Front (Right) -> Page 1
+  // Sheet 1 Back (Left) -> Page 2 / Sheet 2 Front (Right) -> Page 3
+  
+  // Implementation mapping:
+  // Sheet 0: Front=Cover, Back=Intro
+  // Sheet 1: Front=Day 1, Back=Day 2
+  // Sheet 2: Front=Day 3, Back=Day 4
+  // ...
+  
+  const numDaySheets = Math.ceil(totalDays / 2);
+  
+  for (let i = 0; i < numDaySheets; i++) {
+    const dayIdx1 = i * 2; // Day 1 (index 0)
+    const dayIdx2 = i * 2 + 1; // Day 2 (index 1)
+    
+    sheets.push({
+      id: i + 1,
+      front: dayIdx1 < totalDays ? { type: 'day', day: dayIdx1 + 1, data: insights[dayIdx1] } : { type: 'blank' },
+      back: dayIdx2 < totalDays ? { type: 'day', day: dayIdx2 + 1, data: insights[dayIdx2] } : { type: 'blank' }
+    });
+  }
+  
+  // Add a back cover if needed, or just leave the last blank
+  return sheets;
+};
+
+const Home: React.FC = () => {
+  const { t, language } = useLanguage();
+  const navigate = useNavigate();
+  const bookRef = useRef<HTMLDivElement>(null);
+  
+  // State
+  const [sheets, setSheets] = useState<BookSheet[]>([]);
+  const [totalSheets, setTotalSheets] = useState(0);
+  
+  // 3D Book State
+  const [flipProgress, setFlipProgress] = useState(0); // 0 to 1 (representing total book traversal)
+  const [currentSheetIndex, setCurrentSheetIndex] = useState(0); // Track strictly for "lock" mode arrows
+  const [isLocked, setIsLocked] = useState(false);
+  const [viewMode, setViewMode] = useState<'interactive' | 'reader'>('interactive');
+  
+  // Data State
+  const [hotResources, setHotResources] = useState<Resource[]>([]);
+  const [isHotLoading, setHotLoading] = useState(true);
+  const [monthlyInsights, setMonthlyInsights] = useState<DailyInsightSnapshot[]>([]);
+
+  // 1. Load Monthly Data
+  useEffect(() => {
+    const now = new Date();
+    // Use the new service method
+    const data = dailyInsightService.getMonthlyInsights(now.getFullYear(), now.getMonth(), language);
+    setMonthlyInsights(data);
+    
+    const builtSheets = buildMonthlySheets(now.getFullYear(), now.getMonth(), data, t);
+    setSheets(builtSheets);
+    setTotalSheets(builtSheets.length);
+    
+    // Auto-open to today
+    // If Today is Day D (1-based).
+    // D=1 (Front Sheet 1). We need to see Sheet 1 Front.
+    // To see Sheet 1 Front, we must flip Sheet 0.
+    // D=2 (Back Sheet 1). We need to see Sheet 1 Back. Flip Sheet 1.
+    // Formula: Sheets to flip = Math.ceil(day / 2)
+    // Wait. 
+    // Sheet 0 (Cover).
+    // Day 1 is on Sheet 1 Front.
+    // If I flip Sheet 0, I see Sheet 0 Back + Sheet 1 Front. (Day 1 Visible).
+    // So Flip Index = 0 (meaning 1 sheet flipped? No. Index 0 is the first sheet).
+    
+    // Let's simplify:
+    // To see Day D:
+    // Target Flipped Count = Math.ceil(D / 2)
+    // e.g. Day 1 -> Ceil(0.5) = 1. Flip 1 sheet (Sheet 0).
+    // Day 2 -> Ceil(1) = 1. Flip 1 sheet? 
+    // If I flip Sheet 0, I see Sheet 0 Back & Sheet 1 Front (Day 1).
+    // If I flip Sheet 1, I see Sheet 1 Back (Day 2) & Sheet 2 Front (Day 3).
+    // So for Day 2, I need to flip 2 sheets (0 and 1).
+    
+    const day = now.getDate();
+    // If we want "Today and Tomorrow" (Day D and D+1).
+    // Ideally we want D on Left or Right.
+    // If D is odd (1, 3, 5): It's on Front (Right). 
+    //   Flip sheets 0..(D-1)/2.
+    //   Example Day 1: Flip Sheet 0. Visible: Intro(L), Day 1(R).
+    //   Example Day 3: Flip Sheet 0, 1. Visible: Day 2(L), Day 3(R).
+    // If D is even (2, 4, 6): It's on Back (Left).
+    //   Flip sheets 0..(D/2).
+    //   Example Day 2: Flip Sheet 0, 1. Visible: Day 2(L), Day 3(R).
+    //   Example Day 4: Flip Sheet 0, 1, 2. Visible: Day 4(L), Day 5(R).
+    
+    // So for any D:
+    // Target Sheets to be "Left/Flipped" = Math.ceil(D / 2)
+    // e.g. D=1 -> 1 (Sheet 0).
+    // D=2 -> 1 (Sheet 0)? No, if I flip Sheet 0 only, I see Day 1. Day 2 is hidden on back of Sheet 1.
+    // To see Day 2, I must flip Sheet 1 too. So 2 sheets.
+    
+    // Correct Logic:
+    // Day D location:
+    // Sheet Index = Math.floor((D-1)/2) + 1. (Sheet 1 for Days 1,2)
+    // Side: (D-1)%2 === 0 ? Front : Back.
+    
+    // To see Sheet K Front: Flip 0..K-1. (Count K)
+    // To see Sheet K Back: Flip 0..K. (Count K+1)
+    
+    const sheetIdxOfDate = Math.floor((day - 1) / 2) + 1;
+    const isBack = (day - 1) % 2 !== 0;
+    
+    const sheetsToFlip = isBack ? sheetIdxOfDate + 1 : sheetIdxOfDate;
+    
+    // Map sheetsToFlip to progress (0 to 1)
+    // If 0 sheets flipped -> 0.0
+    // If All sheets flipped -> 1.0
+    // Progress ~ sheetsToFlip / totalSheets
+    // But slight adjustment to be centered.
+    
+    const targetProgress = Math.min(0.99, Math.max(0.01, sheetsToFlip / (builtSheets.length + 1))); // Approximate
+    
+    setFlipProgress(targetProgress);
+    
+  }, [language, t]);
+
+  useEffect(() => {
+    const loadHot = async () => {
+      try {
+        setHotLoading(true);
+        const data = await resourceService.getHotResources();
+        setHotResources(data);
+      } catch (error) {
+        console.error('Failed to load hot resources', error);
+      } finally {
+        setHotLoading(false);
+      }
+    };
+    loadHot();
+  }, []);
+
+  // Interaction Logic
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (isLocked || !bookRef.current) return;
+    if (viewMode === 'reader' || isLocked || !bookRef.current) return;
 
     const rect = bookRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const width = rect.width;
-    
-    // Sensitivity adjustment
     const progress = Math.max(0, Math.min(1, x / width));
     setFlipProgress(progress);
   };
 
   const handleMouseLeave = () => {
-    if (!isLocked) {
-      setFlipProgress(0); // Close book
-    }
-  };
-  
-  const toggleLock = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    const newState = !isLocked;
-    setIsLocked(newState);
-    
-    if (newState) {
-        // On Lock: Open to the middle spread (Sheet 2)
-        setFlipProgress(0.25); 
+    if (viewMode === 'interactive' && !isLocked) {
+      // Optional: Reset or Keep? Let's keep it open to today usually, but purely interactive means it follows mouse.
+      // Let's snap back to "Today" if they leave? Or just 0?
+      // User experience: better to stay where it was or close? 
+      // Let's just leave it.
     }
   };
 
-  // Generic Update Handler
-  const handleContentUpdate = (sheetId: number, side: 'front' | 'back', field: 'title' | 'content', value: string) => {
-    setSheets(prev => prev.map(s => {
-        if (s.id !== sheetId) return s;
-        return {
-            ...s,
-            [side]: { ...s[side], [field]: value }
-        };
-    }));
+  const toggleLock = () => {
+    setIsLocked(!isLocked);
+    setViewMode(prev => prev === 'interactive' ? 'reader' : 'interactive');
   };
 
-  const handleImageUpload = (sheetId: number, side: 'front' | 'back') => {
-    if (!isLocked) return;
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = (e: any) => {
-       if (e.target.files && e.target.files[0]) {
-          const url = URL.createObjectURL(e.target.files[0]);
-          setSheets(prev => prev.map(s => {
-              if (s.id !== sheetId) return s;
-              return { ...s, [side]: { ...s[side], image: url } };
-          }));
-       }
-    };
-    input.click();
-  };
-
-  const renderContent = (data: PageContent, sheetId: number, side: 'front' | 'back') => {
-      if (data.type === 'cover') {
-          return (
-             <div className="h-full w-full cover-texture p-8 flex flex-col justify-between text-amber-50">
-                <div className="border-2 border-amber-500/30 h-full rounded-lg p-6 flex flex-col relative">
-                   <div className="absolute top-4 right-4 opacity-70"><Sparkles size={24} className="text-amber-400"/></div>
-                   <div className="mt-16 text-center">
-                      <h1 className="text-5xl font-serif font-bold tracking-widest drop-shadow-xl mb-2">LUMINA</h1>
-                      <p className="text-[10px] tracking-[0.6em] text-amber-200/80 uppercase">The Knowledge Codex</p>
-                      <div className="w-16 h-1 bg-gradient-to-r from-transparent via-amber-500 to-transparent mx-auto my-8"></div>
-                   </div>
-                   <div className="mt-auto text-center opacity-60 text-xs font-mono tracking-widest text-amber-100">EST. 2024</div>
-                </div>
-             </div>
-          );
-      }
-      
-      if (data.type === 'title') {
-          return (
-             <div className="w-full h-full p-10 flex flex-col items-center justify-center text-center bg-[#fdfbf7] pattern-grid-lg">
-                 <div 
-                    className={`text-4xl font-serif font-black text-slate-900 mb-6 leading-tight whitespace-pre-line ${isLocked ? 'editable-content' : ''}`}
-                    contentEditable={isLocked}
-                    suppressContentEditableWarning
-                    onBlur={(e) => handleContentUpdate(sheetId, side, 'title', e.currentTarget.innerText)}
-                 >
-                    {data.title}
-                 </div>
-                 <div className="w-8 h-8 text-slate-300 mb-6"><Sparkles /></div>
-                 <p 
-                    className={`text-slate-500 italic font-serif ${isLocked ? 'editable-content' : ''}`}
-                    contentEditable={isLocked}
-                    suppressContentEditableWarning
-                    onBlur={(e) => handleContentUpdate(sheetId, side, 'content', e.currentTarget.innerText)}
-                 >
-                   {data.content}
-                 </p>
-             </div>
-          );
-      }
-
-      if (data.type === 'text') {
-          return (
-             <div className="w-full h-full p-8 bg-white">
-                 <div className="h-full border-slate-100 py-2">
-                    <h3 
-                       className={`text-xl font-bold text-slate-800 mb-6 ${isLocked ? 'editable-content' : ''}`}
-                       contentEditable={isLocked}
-                       suppressContentEditableWarning
-                       onBlur={(e) => handleContentUpdate(sheetId, side, 'title', e.currentTarget.innerText)}
-                    >
-                       {data.title}
-                    </h3>
-                    <p 
-                       className={`text-base text-slate-600 leading-loose font-serif text-justify ${isLocked ? 'editable-content' : ''}`}
-                       contentEditable={isLocked}
-                       suppressContentEditableWarning
-                       onBlur={(e) => handleContentUpdate(sheetId, side, 'content', e.currentTarget.innerText)}
-                    >
-                       {data.content}
-                    </p>
-                 </div>
-                 {/* Page Number */}
-                 <div className="absolute bottom-4 right-6 text-[10px] text-slate-400 font-mono">
-                    {sheetId * 2 + (side === 'front' ? 1 : 2)}
-                 </div>
-             </div>
-          );
-      }
-
-      if (data.type === 'image') {
-          return (
-             <div className="w-full h-full p-6 bg-white flex items-center justify-center">
-                 <div 
-                    onClick={() => handleImageUpload(sheetId, side)}
-                    className={`w-full h-5/6 border-2 border-dashed rounded-lg flex flex-col items-center justify-center relative overflow-hidden group ${isLocked ? 'cursor-pointer border-indigo-300 hover:bg-indigo-50' : 'border-slate-200'}`}
-                 >
-                    {data.image ? (
-                        <img src={data.image} alt="Uploaded" className="w-full h-full object-cover" />
-                    ) : (
-                        <div className="text-center p-6">
-                           <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-4 text-slate-400">
-                              <ImageIcon size={24} />
-                           </div>
-                           <p className="text-slate-400 font-medium text-sm">{isLocked ? "Click to Upload" : "Image Space"}</p>
-                        </div>
-                    )}
-                 </div>
-             </div>
-          );
-      }
-
+  const renderSheetContent = (content: PageContent, side: 'front' | 'back') => {
+    if (content.type === 'cover') {
       return (
-        <div className="w-full h-full flex items-center justify-center bg-white">
-           <div className="text-slate-300 font-mono text-xs">{data.content || "Blank"}</div>
+        <div className="h-full w-full cover-texture p-8 flex flex-col justify-between text-amber-50">
+          <div className="border-2 border-amber-500/30 h-full rounded-lg p-6 flex flex-col relative">
+            <div className="absolute top-4 right-4 opacity-70"><Sparkles size={24} className="text-amber-400" /></div>
+            <div className="mt-20 text-center space-y-6">
+              <p className="text-xs tracking-[0.6em] text-amber-200/80 uppercase">{content.data.year}</p>
+              <h1 className="text-5xl font-serif font-bold tracking-widest drop-shadow-xl text-amber-100">{content.data.title}</h1>
+              <div className="w-16 h-1 bg-amber-500/50 mx-auto rounded-full"></div>
+              <p className="text-xl font-serif italic text-amber-200/80">{new Date(content.data.year, content.data.month).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US', { month: 'long' })}</p>
+            </div>
+          </div>
         </div>
       );
+    }
+
+    if (content.type === 'intro') {
+      return (
+        <div className="h-full w-full bg-[#1a1d24] p-10 text-slate-300 flex flex-col justify-center relative overflow-hidden">
+          <div className="absolute inset-0 opacity-10 pattern-grid-lg"></div>
+          <div className="relative z-10 text-center">
+             <Quote size={32} className="text-indigo-500 mx-auto mb-6 opacity-50" />
+             <p className="text-lg font-serif italic leading-relaxed opacity-80 mb-8">"{content.data.summary}"</p>
+             <div className="flex items-center justify-center gap-2 text-xs font-mono text-indigo-400 uppercase tracking-widest">
+               <MapPin size={12} /> {content.data.location || 'Global'}
+             </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (content.type === 'day' && content.data) {
+      const d: DailyInsightSnapshot = content.data;
+      const dateObj = new Date(d.dateISO);
+      const isToday = new Date().toDateString() === dateObj.toDateString();
+      
+      // Random visual style based on day
+      const bgClass = PAGE_GRADIENTS[content.day! % PAGE_GRADIENTS.length];
+      const WeatherIcon = WEATHER_ICONS[d.weather.icon || 'sun'] || Sun;
+
+      return (
+        <div className={`h-full w-full p-6 ${bgClass} flex flex-col relative overflow-hidden`}>
+          {/* Header: Date & Status */}
+          <div className="flex justify-between items-start mb-6">
+             <div>
+               <div className="flex items-baseline gap-2">
+                 <span className="text-6xl font-black text-slate-900/90 tracking-tighter">{dateObj.getDate()}</span>
+                 <span className="text-sm font-bold text-slate-500 uppercase tracking-wider">{d.weekday}</span>
+               </div>
+               <div className="flex items-center gap-2 text-xs text-slate-400 mt-1">
+                  <Calendar size={12} />
+                  <span>{dateObj.getFullYear()}.{dateObj.getMonth()+1}</span>
+                  {isToday && <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-full text-[10px] font-bold ml-2">TODAY</span>}
+               </div>
+             </div>
+             <div className="flex flex-col items-end">
+               <WeatherIcon size={28} className="text-slate-700 mb-1" />
+               <span className="text-lg font-bold text-slate-700">{d.weather.temperature}°</span>
+             </div>
+          </div>
+          
+          {/* Divider */}
+          <div className="w-full h-px bg-slate-900/5 mb-6"></div>
+          
+          {/* Content Body */}
+          <div className="flex-1 flex flex-col gap-5">
+            
+            {/* Almanac Section */}
+            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-white/50 shadow-sm">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-bold text-indigo-900 uppercase tracking-wider opacity-60">Almanac</span>
+                <span className="text-xs font-serif italic text-slate-500">{d.almanac.lunarDate}</span>
+              </div>
+              <div className="flex gap-4 text-xs">
+                <div className="flex-1">
+                  <span className="block text-[10px] text-emerald-600 font-bold uppercase mb-1">Lucky</span>
+                  <p className="text-slate-700 leading-tight">{d.almanac.lucky.slice(0, 2).join(', ')}</p>
+                </div>
+                <div className="w-px bg-slate-200"></div>
+                <div className="flex-1">
+                  <span className="block text-[10px] text-rose-600 font-bold uppercase mb-1">Taboo</span>
+                  <p className="text-slate-700 leading-tight">{d.almanac.taboo.slice(0, 2).join(', ')}</p>
+                </div>
+              </div>
+            </div>
+            
+            {/* Image / Random Visual */}
+            <div className="h-32 rounded-xl bg-slate-200 overflow-hidden relative group shadow-inner">
+              <img 
+                src={`https://picsum.photos/seed/${d.dateISO}/400/200`} 
+                alt="Daily Mood" 
+                className="w-full h-full object-cover opacity-90 group-hover:scale-110 transition-transform duration-700" 
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
+              <div className="absolute bottom-2 left-3 text-white/90 text-[10px] font-mono">MOOD · {d.weather.condition}</div>
+            </div>
+
+            {/* Quote Section (Chicken Soup) */}
+            <div className="mt-auto">
+               <Quote size={20} className="text-slate-900/20 mb-2" />
+               <p className="text-sm font-medium text-slate-800 italic leading-relaxed">
+                 "{d.quote.text}"
+               </p>
+               <p className="text-xs text-slate-500 mt-2 text-right">— {d.quote.author}</p>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="mt-6 flex items-center justify-between text-[10px] text-slate-400 font-mono uppercase">
+             <span>Lemind Daily</span>
+             <span>{content.day} / {monthlyInsights.length}</span>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="h-full w-full bg-white flex items-center justify-center">
+        <span className="text-slate-200">Blank</span>
+      </div>
+    );
   };
 
+  // Render
   return (
     <div className="bg-[#F8FAFC] min-h-screen flex flex-col">
-      {/* Hero Section */}
-      <div className="relative flex flex-col items-center pt-8 pb-20 overflow-hidden">
+      {/* Hero Section with 3D Book */}
+      <div className="relative pt-12 pb-24 overflow-hidden">
         <div className="absolute inset-0 pointer-events-none">
-           <div className="absolute top-0 right-0 w-[800px] h-[800px] rounded-full bg-indigo-100/50 blur-[120px] animate-pulse-slow"></div>
-           <div className="absolute bottom-0 left-0 w-[600px] h-[600px] rounded-full bg-amber-100/40 blur-[100px]" style={{ animationDelay: '2s' }}></div>
+           <div className="absolute -top-20 right-0 w-[800px] h-[800px] rounded-full bg-indigo-50/80 blur-[100px]"></div>
+           <div className="absolute top-40 left-0 w-[600px] h-[600px] rounded-full bg-amber-50/80 blur-[80px]"></div>
         </div>
 
-        <div className="max-w-[1600px] w-full mx-auto px-6 grid lg:grid-cols-2 gap-12 items-center relative z-10 min-h-[650px]">
+        <div className="max-w-[1400px] w-full mx-auto px-6 grid lg:grid-cols-12 gap-12 items-center relative z-10">
            
-           {/* Left: Content */}
-           <div className="order-2 lg:order-1 lg:pl-8 text-center lg:text-left">
-             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white border border-indigo-100 text-indigo-600 text-xs font-bold tracking-wider uppercase mb-8 shadow-sm">
-               <Sparkles size={14} />
-               {t('home.heroTag')}
-             </div>
-             <h1 className="text-6xl xl:text-8xl font-bold text-slate-900 tracking-tighter mb-8 leading-[0.95]">
-               Share <span className="text-indigo-600">Wisdom.</span><br/>
-               Earn <span className="text-amber-500">Value.</span>
+           {/* Left Text */}
+           <div className="lg:col-span-5 text-center lg:text-left">
+             <h1 className="text-5xl font-bold text-slate-900 mb-6 tracking-tight">
+               Every Day <br/><span className="text-indigo-600">Counts.</span>
              </h1>
-             <p className="text-xl text-slate-600 max-w-xl mx-auto lg:mx-0 mb-12 leading-relaxed font-light">
-               {t('home.heroDesc')}
+             <p className="text-slate-600 mb-8 leading-relaxed">
+               {t('home.heroDesc') || "Your daily source of wisdom, weather, and inspiration. Flip through the month to find your rhythm."}
              </p>
              <div className="flex flex-wrap justify-center lg:justify-start gap-4">
-               <button onClick={() => onNavigate('view')} className="px-8 py-4 bg-slate-900 text-white rounded-full font-bold shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-300 flex items-center gap-2">
-                 {t('home.btnExplore')} <ArrowRight size={18} />
+               <button onClick={() => navigate('/resources')} className="px-6 py-3 bg-slate-900 text-white rounded-full font-bold hover:shadow-xl hover:scale-105 transition-all flex items-center gap-2 text-sm">
+                 {t('home.btnExplore')} <ArrowRight size={16} />
                </button>
+               <button onClick={toggleLock} className={`px-6 py-3 rounded-full font-bold border text-sm transition-all flex items-center gap-2 ${isLocked ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}>
+                 {isLocked ? <><Unlock size={16}/> Unlock Book</> : <><BookOpen size={16}/> Read Mode</>}
+               </button>
+             </div>
+             
+             <div className="mt-12 p-4 bg-white/50 backdrop-blur rounded-2xl border border-slate-100 inline-block text-left">
+               <div className="flex items-center gap-3 mb-2">
+                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Today's Focus</span>
+               </div>
+               <p className="text-sm font-medium text-slate-800">"{monthlyInsights.find(d => new Date(d.dateISO).toDateString() === new Date().toDateString())?.quote.text || 'Loading...'}"</p>
              </div>
            </div>
 
-           {/* Right: 3D Interactive Book */}
-           <div className="order-1 lg:order-2 h-[700px] flex items-center justify-center relative perspective-container">
-              
-              <div className="absolute top-0 right-0 z-50 flex gap-2">
+           {/* Right 3D Book */}
+           <div className="lg:col-span-7 h-[500px] flex items-center justify-center perspective-container relative">
+             <div className="book-stage scale-[0.65] md:scale-[0.7]">
+               <div
+                 ref={bookRef}
+                 className={`book-core ${isLocked ? 'locked' : ''}`}
+                 onMouseMove={handleMouseMove}
+                 onMouseLeave={handleMouseLeave}
+                 style={isLocked ? { transform: 'rotateX(0deg) rotateY(0deg) translateZ(0px)' } : {}}
+               >
+                 <div className="back-cover-block"></div>
+                 <div className="spine-block">Lemind · {new Date().getFullYear()}</div>
+
+                 {sheets.map((sheet, i) => {
+                   // Calculate rotation based on flipProgress
+                   // We have N sheets.
+                   // 0 -> All closed (Right side visible)
+                   // 1 -> All open (Left side visible)
+                   // Each sheet triggers at a specific threshold.
+                   
+                   const threshold = (i + 1) / (sheets.length + 1);
+                   const range = 0.15; // Sensitivity
+                   
+                   let rotation = 0;
+                   
+                   // Interactive Flip Logic
+                   if (viewMode === 'interactive' && !isLocked) {
+                      if (flipProgress > threshold + range/2) rotation = -178;
+                      else if (flipProgress < threshold - range/2) rotation = 0;
+                      else {
+                        // Interpolate
+                        const t = (flipProgress - (threshold - range/2)) / range;
+                        rotation = -178 * t;
+                      }
+                   } else {
+                      // Reader Mode: Snap to "open" pages
+                      // If flipProgress tells us to be at Page X.
+                      // Simple logic: If progress > threshold, flip it.
+                      rotation = flipProgress > threshold ? -178 : 0;
+                   }
+
+                   const isFlipped = rotation < -90;
+                   const zIndex = isFlipped ? i : (sheets.length - i); // Proper Z-stacking
+
+                   return (
+                     <div
+                       key={sheet.id}
+                       className="sheet-layer"
+                       style={{
+                         transform: `translateZ(${isFlipped ? i : -i}px) rotateY(${rotation}deg)`,
+                         zIndex: zIndex + 100
+                       }}
+                     >
+                       {/* Front Face */}
+                       <div className="page-side page-front">
+                         {renderSheetContent(sheet.front, 'front')}
+                       </div>
+                       {/* Back Face */}
+                       <div className="page-side page-back">
+                         {renderSheetContent(sheet.back, 'back')}
+                       </div>
+                     </div>
+                   );
+                 })}
+               </div>
+             </div>
+             
+             {/* Controls for Reader Mode */}
+             {isLocked && (
+               <div className="absolute bottom-0 left-0 right-0 flex justify-center gap-4 pb-4">
                  <button 
-                    onClick={toggleLock}
-                    className={`px-5 py-2.5 rounded-full font-bold text-sm shadow-xl flex items-center gap-2 transition-all transform hover:scale-105 ${isLocked ? 'bg-indigo-600 text-white ring-4 ring-indigo-200' : 'bg-white text-slate-700 hover:bg-slate-50'}`}
+                   onClick={() => setFlipProgress(Math.max(0, flipProgress - 0.1))}
+                   className="p-3 bg-white rounded-full shadow-lg hover:bg-slate-50 text-slate-700"
                  >
-                    {isLocked ? <><Save size={16} /> Done Reading</> : <><BookOpen size={16} /> Read & Edit</>}
+                   <MoveRight className="rotate-180" size={20} />
                  </button>
-              </div>
-
-              <div className="book-stage">
-                 <div 
-                    ref={bookRef}
-                    className={`book-core ${isLocked ? 'locked' : ''}`}
-                    onMouseMove={handleMouseMove}
-                    onMouseLeave={handleMouseLeave}
-                 >
-                    <div className="back-cover-block"></div>
-                    <div className="spine-block">LUMINA</div>
-
-                    {sheets.map((sheet, i) => {
-                       // Riffle logic
-                       const triggerPoint = i / TOTAL_SHEETS;
-                       const range = 0.1; // Tighter range for cleaner riffle
-                       let rotation = 0;
-                       
-                       if (flipProgress > triggerPoint + range) {
-                           rotation = -178;
-                       } else if (flipProgress < triggerPoint - range) {
-                           rotation = 0;
-                       } else {
-                           const t = (flipProgress - (triggerPoint - range)) / (range * 2);
-                           rotation = t * -178;
-                       }
-
-                       // Dynamic Z-Index Stacking
-                       // When on right (rot > -90), stack -i (0 is top).
-                       // When on left (rot < -90), stack +i (0 is bottom).
-                       const isFlipped = rotation < -90;
-                       const dynamicZ = isFlipped ? i : -i;
-
-                       return (
-                         <div 
-                            key={sheet.id}
-                            className="sheet-layer"
-                            style={{
-                               transform: `translateZ(${dynamicZ}px) rotateY(${rotation}deg)`,
-                               zIndex: TOTAL_SHEETS + dynamicZ // Ensure positive z-index context
-                            }}
-                         >
-                             {/* Front Side (Right Page) */}
-                             <div className="page-side page-front">
-                                 {renderContent(sheet.front, sheet.id, 'front')}
-                             </div>
-                             
-                             {/* Back Side (Left Page) */}
-                             <div className="page-side page-back">
-                                 {renderContent(sheet.back, sheet.id, 'back')}
-                             </div>
-                         </div>
-                       );
-                    })}
-                 </div>
-              </div>
+                 <button 
+                    onClick={() => setFlipProgress(Math.min(1, flipProgress + 0.1))}
+                    className="p-3 bg-white rounded-full shadow-lg hover:bg-slate-50 text-slate-700"
+                  >
+                   <MoveRight size={20} />
+                 </button>
+               </div>
+             )}
            </div>
         </div>
 
         {/* Trending Section */}
-        <div className="max-w-[1600px] w-full mx-auto px-6 relative z-10 mt-12">
-          <div className="flex items-center justify-between mb-10">
+        <div className="max-w-[1400px] w-full mx-auto px-6 relative z-10 mt-12">
+          <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-indigo-600 rounded-xl text-white shadow-lg shadow-indigo-200"><TrendingUp size={22} /></div>
-              <h2 className="text-3xl font-bold text-slate-900">{t('home.trendingTitle')}</h2>
+              <div className="p-2 bg-indigo-600 rounded-lg text-white shadow-lg shadow-indigo-200"><TrendingUp size={20} /></div>
+              <h2 className="text-2xl font-bold text-slate-900">{t('home.trendingTitle')}</h2>
             </div>
-            <button className="text-sm font-bold text-slate-500 hover:text-indigo-600 flex items-center gap-1 transition-colors px-4 py-2 rounded-lg hover:bg-slate-100">
+            <button onClick={() => navigate('/resources')} className="text-sm font-bold text-slate-500 hover:text-indigo-600 flex items-center gap-1 transition-colors">
               {t('home.viewAll')} <ChevronRight size={16} />
             </button>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {TRENDING_ITEMS.map((item) => (
-              <div key={item.id} className="group bg-white rounded-3xl p-1.5 border border-slate-100 hover:border-indigo-200 hover:shadow-2xl transition-all duration-300 cursor-pointer hover:-translate-y-1" onClick={() => onNavigate('view')}>
-                <div className="bg-slate-100 h-60 rounded-[20px] relative overflow-hidden">
-                  <img src={item.image} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
-                  <div className="absolute top-4 left-4">
-                     <span className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg shadow-sm ${
-                        item.category === 'Architecture' ? 'bg-indigo-500 text-white' :
-                        item.category === 'AI & LLM' ? 'bg-blue-500 text-white' :
-                        'bg-white/90 text-slate-800 backdrop-blur'
-                     }`}>
-                        {item.category}
-                     </span>
+          <div className="grid md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {hotResources.map((item) => (
+              <div
+                key={item.id}
+                className="group bg-white rounded-xl p-2 border border-slate-100 hover:border-indigo-100 hover:shadow-lg transition-all duration-300 cursor-pointer"
+                onClick={() => navigate(`/article/${item.id}`)}
+              >
+                <div className="bg-slate-100 aspect-[16/10] rounded-lg relative overflow-hidden">
+                  <img
+                    src={item.thumbnail_url || `https://picsum.photos/seed/${item.id}/600/400`}
+                    alt={item.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                  />
+                  <div className="absolute top-3 left-3">
+                    <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm ${CATEGORY_TAG_STYLES[item.category_slug || ''] || 'bg-white/90 text-slate-800'}`}>
+                      {item.category_name || 'General'}
+                    </span>
                   </div>
-                  <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-xs font-medium px-3 py-1.5 rounded-lg border border-white/10 flex items-center gap-1.5">
-                    {item.points > 0 ? <Lock size={12} className="text-amber-400" /> : <Unlock size={12} className="text-emerald-400" />} 
-                    {item.points > 0 ? `${item.points} Pts` : 'Free'}
-                  </div>
-                </div>
-                <div className="p-6">
-                  <h3 className="font-bold text-slate-900 text-xl mb-3 leading-tight group-hover:text-indigo-600 transition-colors">{item.title}</h3>
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-50 mt-4">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden border border-white shadow-sm">
-                         <img src={`https://ui-avatars.com/api/?name=${item.author}&background=random`} alt="User" />
+                  {/* 付费文章标识 */}
+                  {!item.is_free && item.points_required > 0 && (
+                    <div className="absolute top-3 right-3">
+                      <div className="bg-gradient-to-br from-amber-500 to-orange-600 text-white px-2.5 py-1 rounded-lg text-[10px] font-black shadow-lg flex items-center gap-1 backdrop-blur-sm border border-white/20">
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+                        </svg>
+                        {item.points_required}
                       </div>
-                      <span className="text-sm font-medium text-slate-600">{item.author}</span>
                     </div>
-                    <div className="flex items-center gap-1 text-slate-400 text-xs"><Clock size={12} /> {item.date}</div>
+                  )}
+                </div>
+                <div className="p-3">
+                  <h3 className="font-bold text-slate-900 text-sm mb-2 line-clamp-2 group-hover:text-indigo-600 transition-colors">
+                    {item.title}
+                  </h3>
+                  <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-50">
+                    <div className="flex items-center gap-1.5">
+                       <div className="w-5 h-5 rounded-full bg-slate-200 overflow-hidden">
+                         <img 
+                           src={item.author_avatar || `https://ui-avatars.com/api/?name=${item.author_username}&background=random`} 
+                           alt="" 
+                           className="w-full h-full object-cover"
+                         />
+                       </div>
+                       <span className="text-xs font-medium text-slate-500">{item.author_username}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {/* 阅读量 */}
+                      <div className="flex items-center gap-1 text-xs text-slate-400">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        <span className="font-medium">{item.views || 0}</span>
+                      </div>
+                      <span className="text-xs text-slate-400">{new Date(item.created_at).toLocaleDateString()}</span>
+                    </div>
                   </div>
                 </div>
               </div>

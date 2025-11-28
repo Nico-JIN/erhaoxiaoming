@@ -1,48 +1,105 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, Download, Lock, Star, FileText, Box, Cpu, Briefcase, PenTool, Zap, LayoutGrid } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useAuth } from '../contexts/AuthContext';
+import resourceService, { Resource } from '../services/resourceService';
+import categoryService, { Category } from '../services/categoryService';
 
-interface ResourceItem {
-  id: string;
-  title: string;
-  type: string;
-  size: string;
-  category: string;
-  isLocked: boolean;
-  points?: number;
-  date: string;
-  tags: string[];
-  description?: string;
-}
-
-const CATEGORIES = [
-  { id: 'engineering', label: 'Engineering', icon: Cpu },
-  { id: 'design', label: 'Design', icon: PenTool },
-  { id: 'business', label: 'Business', icon: Briefcase },
-  { id: 'productivity', label: 'Productivity', icon: Zap },
-  { id: 'ai', label: 'Artificial Intel', icon: Box },
-];
-
-const MOCK_RESOURCES: ResourceItem[] = [
-  { id: '1', title: 'System Architecture Patterns', type: 'PDF', size: '45MB', category: 'engineering', isLocked: true, points: 150, date: '2023-11-01', tags: ['Backend', 'Arch'], description: 'Comprehensive guide to microservices, event-driven architecture, and more.' },
-  { id: '2', title: 'React Performance Optimization', type: 'EPUB', size: '12MB', category: 'engineering', isLocked: false, date: '2023-10-28', tags: ['Frontend', 'Perf'], description: 'Advanced techniques for keeping your React apps running at 60fps.' },
-  { id: '3', title: 'Figma UI Kit Pro V2', type: 'FIG', size: '120MB', category: 'design', isLocked: true, points: 300, date: '2023-10-15', tags: ['UI', 'Kit'], description: 'Over 500+ components for rapid prototyping and design systems.' },
-  { id: '4', title: 'Startup Financial Models 2024', type: 'XLSX', size: '5MB', category: 'business', isLocked: true, points: 200, date: '2023-11-05', tags: ['Finance', 'Excel'], description: 'Plug-and-play financial models for SaaS, Marketplace, and eCommerce startups.' },
-  { id: '5', title: 'Obsidian Second Brain Template', type: 'ZIP', size: '2MB', category: 'productivity', isLocked: false, date: '2023-09-20', tags: ['PKM', 'Tools'], description: 'A structured vault template to jumpstart your personal knowledge management.' },
-  { id: '6', title: 'Transformer Attention Mechanisms', type: 'PDF', size: '18MB', category: 'ai', isLocked: false, date: '2023-11-10', tags: ['LLM', 'Research'], description: 'Deep dive research paper on self-attention mechanisms in NLP.' },
-];
+const ICON_MAP: Record<string, React.ComponentType<{ size?: number }>> = {
+  Cpu,
+  PenTool,
+  Briefcase,
+  Zap,
+  Box,
+  LayoutGrid,
+};
 
 const Resources: React.FC = () => {
   const { t } = useLanguage();
-  const [activeCategory, setActiveCategory] = useState('engineering');
+  const navigate = useNavigate();
+  const { user, refreshUser, applyUserPatch } = useAuth();
+
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [activeCategory, setActiveCategory] = useState<number | null>(null);
+  const [resources, setResources] = useState<Resource[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [loadingCategories, setLoadingCategories] = useState(true);
+  const [loadingResources, setLoadingResources] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredResources = MOCK_RESOURCES.filter(r => 
-    r.category === activeCategory && 
-    r.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        setLoadingCategories(true);
+        const data = await categoryService.listCategories(true);
+        setCategories(data);
+        if (data.length) {
+          setActiveCategory(data[0].id);
+        }
+      } catch (err) {
+        console.error('Failed to load categories', err);
+        setError('Unable to load categories.');
+      } finally {
+        setLoadingCategories(false);
+      }
+    };
+    loadCategories();
+  }, []);
+
+  useEffect(() => {
+    const loadResources = async () => {
+      if (!activeCategory) {
+        setResources([]);
+        return;
+      }
+      try {
+        setLoadingResources(true);
+        const data = await resourceService.listResources({
+          category_id: activeCategory,
+          status: 'Published',
+        });
+        setResources(data);
+      } catch (err) {
+        console.error('Failed to load resources', err);
+        setError('Unable to load resources.');
+      } finally {
+        setLoadingResources(false);
+      }
+    };
+
+    loadResources();
+  }, [activeCategory]);
+
+  const filteredResources = useMemo(() => {
+    const keyword = searchQuery.toLowerCase();
+    return resources.filter((resource) => resource.title.toLowerCase().includes(keyword));
+  }, [resources, searchQuery]);
+
+  const handleDownload = async (resource: Resource, event?: React.MouseEvent<HTMLButtonElement>) => {
+    event?.stopPropagation();
+    if (!user) {
+      window.dispatchEvent(new CustomEvent('open-auth-modal'));
+      return;
+    }
+
+    try {
+      const { download_url, balance } = await resourceService.downloadResource(resource.id);
+      window.open(download_url, '_blank');
+      if (typeof balance === 'number') {
+        applyUserPatch({ points: balance });
+      } else {
+        await refreshUser();
+      }
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || 'Unable to download resource.';
+      alert(detail);
+    }
+  };
+
+  const activeCategoryName = categories.find((cat) => cat.id === activeCategory)?.name || t('nav.resources');
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -75,8 +132,8 @@ const Resources: React.FC = () => {
                  <h2 className="text-2xl font-bold text-white">Prism OS</h2>
               </div>
 
-              {CATEGORIES.map((cat, index) => {
-                const Icon = cat.icon;
+              {categories.map((cat) => {
+                const Icon = ICON_MAP[cat.icon || ''] || LayoutGrid;
                 const isActive = activeCategory === cat.id;
                 
                 return (
@@ -95,7 +152,7 @@ const Resources: React.FC = () => {
                             <Icon size={18} />
                          </div>
                          <span className={`font-medium tracking-wider ${isActive ? 'text-white' : 'text-slate-400'}`}>
-                            {cat.label}
+                            {cat.name}
                          </span>
                       </div>
                       {/* TOP FACE */}
@@ -121,8 +178,8 @@ const Resources: React.FC = () => {
           <div className="p-10 lg:p-16 flex-1 overflow-y-auto custom-scrollbar">
              <div className="flex justify-between items-end mb-12 border-b border-slate-200 pb-6">
                 <div>
-                   <h1 className="text-4xl font-bold text-slate-900 mb-2">{CATEGORIES.find(c => c.id === activeCategory)?.label}</h1>
-                   <p className="text-slate-500">Access verified premium resources.</p>
+                   <h1 className="text-4xl font-bold text-slate-900 mb-2">{activeCategoryName}</h1>
+                   <p className="text-slate-500">Access verified premium resources curated by admin.</p>
                 </div>
                 <div className="relative group">
                    <input 
@@ -137,48 +194,77 @@ const Resources: React.FC = () => {
              </div>
 
              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
-                {filteredResources.map((res, i) => (
-                   <div 
-                      key={res.id} 
+                {loadingResources && (
+                  <div className="md:col-span-2 lg:col-span-3 text-center text-slate-400 py-8">Loading resources…</div>
+                )}
+                {!loadingResources && filteredResources.length === 0 && (
+                  <div className="md:col-span-2 lg:col-span-3 text-center text-slate-400 py-8">
+                    {error || 'No resources found in this category yet.'}
+                  </div>
+                )}
+                {filteredResources.map((res, i) => {
+                  const isLocked = !res.is_free && res.points_required > 0;
+                  return (
+                    <div
+                      key={res.id}
                       className="group bg-white rounded-2xl p-1 border border-slate-100 hover:border-indigo-500 hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 ease-out hover:-translate-y-1"
                       style={{ animation: `fadeIn 0.5s ease-out ${i * 0.1}s backwards` }}
-                   >
+                      onClick={() => navigate(`/article/${res.id}`)}
+                    >
                       <div className="h-full bg-white rounded-xl p-6 flex flex-col relative overflow-hidden">
-                         {/* Decorative bg blob */}
-                         <div className="absolute -top-10 -right-10 w-32 h-32 bg-slate-50 rounded-full group-hover:bg-indigo-50 transition-colors duration-500"></div>
-                         
-                         <div className="flex justify-between items-start mb-6 relative z-10">
-                            <div className="w-12 h-12 bg-white border border-slate-100 shadow-sm rounded-xl flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform duration-300">
-                               <FileText size={24} />
+                        <div className="absolute -top-10 -right-10 w-32 h-32 bg-slate-50 rounded-full group-hover:bg-indigo-50 transition-colors duration-500"></div>
+
+                        <div className="flex justify-between items-start mb-6 relative z-10">
+                          <div className="w-12 h-12 bg-white border border-slate-100 shadow-sm rounded-xl flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform duration-300">
+                            <FileText size={24} />
+                          </div>
+                          {isLocked ? (
+                            <div className="bg-gradient-to-br from-amber-500 to-orange-600 text-white px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 shadow-lg animate-pulse">
+                              <Lock size={14} /> {res.points_required} 积分
                             </div>
-                            {res.isLocked ? (
-                               <div className="bg-slate-900 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5">
-                                  <Lock size={12} /> {res.points} PTS
-                               </div>
+                          ) : (
+                            <div className="bg-gradient-to-br from-emerald-500 to-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 shadow-md">
+                              <Star size={14} /> 免费
+                            </div>
+                          )}
+                        </div>
+
+                        <h3 className="text-lg font-bold text-slate-900 mb-2 group-hover:text-indigo-600 transition-colors">{res.title}</h3>
+                        <p className="text-sm text-slate-500 mb-4 line-clamp-2">{res.description}</p>
+                        
+                        {/* 阅读量显示 */}
+                        <div className="flex items-center gap-1 text-xs text-slate-400 mb-6">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                          <span className="font-medium">{t('article.readCount', { count: res.views || 0 })}</span>
+                        </div>
+
+                        <div className="mt-auto">
+                          <div className="flex flex-wrap gap-2 mb-6">
+                            {res.tags.length ? (
+                              res.tags.map((tag) => (
+                                <span key={tag} className="text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50 px-2 py-1 rounded-md">
+                                  {tag}
+                                </span>
+                              ))
                             ) : (
-                               <div className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5">
-                                  <Star size={12} /> FREE
-                               </div>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50 px-2 py-1 rounded-md">General</span>
                             )}
-                         </div>
-
-                         <h3 className="text-lg font-bold text-slate-900 mb-2 group-hover:text-indigo-600 transition-colors">{res.title}</h3>
-                         <p className="text-sm text-slate-500 mb-6 line-clamp-2">{res.description}</p>
-
-                         <div className="mt-auto">
-                            <div className="flex flex-wrap gap-2 mb-6">
-                               {res.tags.map(tag => (
-                                  <span key={tag} className="text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50 px-2 py-1 rounded-md">{tag}</span>
-                               ))}
-                            </div>
-                            <button className="w-full py-3 bg-slate-50 text-slate-600 rounded-xl font-semibold text-sm hover:bg-indigo-600 hover:text-white transition-all shadow-sm hover:shadow-indigo-200 flex items-center justify-center gap-2">
-                               {res.isLocked ? 'Unlock Resource' : 'Download File'}
-                               {res.isLocked ? <Lock size={14} /> : <Download size={14} />}
-                            </button>
-                         </div>
+                          </div>
+                          <button
+                            onClick={(event) => handleDownload(res, event)}
+                            className="w-full py-3 bg-slate-50 text-slate-600 rounded-xl font-semibold text-sm hover:bg-indigo-600 hover:text-white transition-all shadow-sm hover:shadow-indigo-200 flex items-center justify-center gap-2"
+                          >
+                            {isLocked ? 'Unlock Resource' : 'Download File'}
+                            {isLocked ? <Lock size={14} /> : <Download size={14} />}
+                          </button>
+                        </div>
                       </div>
-                   </div>
-                ))}
+                    </div>
+                  );
+                })}
              </div>
           </div>
       </div>

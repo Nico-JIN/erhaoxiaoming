@@ -1,35 +1,51 @@
 
-import React, { useState } from 'react';
-import { HashRouter, Routes, Route, Navigate, useNavigate, Outlet } from 'react-router-dom';
-import { User, UserRole } from './types';
+import React, { ReactNode, useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, Outlet } from 'react-router-dom';
 import AuthModal from './components/AuthModal';
+import ProfileModal from './components/ProfileModal';
 import Home from './pages/Home';
 import Editor from './pages/Editor';
 import ArticleView from './pages/ArticleView';
 import Pricing from './pages/Pricing';
 import AdminPanel from './pages/AdminPanel';
 import Resources from './pages/Resources';
+import OAuthCallback from './pages/OAuthCallback';
+import OAuthSuccess from './pages/OAuthSuccess';
+import OAuthError from './pages/OAuthError';
 import { Search, Wallet, Globe } from 'lucide-react';
 import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Language } from './i18n/translations';
 
+type UserRole = 'USER' | 'VIP' | 'ADMIN';
+
 // --- User Navbar ---
-const Navbar: React.FC<{ user: User | null, onLoginClick: () => void }> = ({ user, onLoginClick }) => {
+const Navbar: React.FC<{ onLoginClick: () => void }> = ({ onLoginClick }) => {
   const navigate = useNavigate();
   const { t, language, setLanguage } = useLanguage();
+  const { user, logout } = useAuth();
   const [showLangMenu, setShowLangMenu] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   
   const toggleLang = (lang: Language) => {
     setLanguage(lang);
     setShowLangMenu(false);
   };
 
+  const handleLogout = async () => {
+    await logout();
+    setShowUserMenu(false);
+    navigate('/');
+  };
+
   return (
+    <>
     <nav className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 md:px-8 h-20 flex items-center justify-between">
       <div className="flex items-center gap-8">
         <div onClick={() => navigate('/')} className="flex items-center gap-2 cursor-pointer">
           <div className="w-9 h-9 bg-gradient-to-tr from-indigo-600 to-purple-500 rounded-xl flex items-center justify-center text-white font-bold text-lg">L</div>
-          <span className="text-2xl font-bold text-slate-900 tracking-tight">Lumina</span>
+          <span className="text-2xl font-bold text-slate-900 tracking-tight">Lemind</span>
         </div>
         
         <div className="hidden md:flex items-center gap-8 font-medium text-slate-600">
@@ -74,7 +90,7 @@ const Navbar: React.FC<{ user: User | null, onLoginClick: () => void }> = ({ use
 
         {user ? (
           <div className="flex items-center gap-4">
-            {user.role === UserRole.ADMIN && (
+            {user.role === 'ADMIN' && (
               <button onClick={() => navigate('/admin')} className="hidden md:flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-800 transition shadow-lg shadow-slate-200">
                 {t('nav.adminCreate')}
               </button>
@@ -86,8 +102,37 @@ const Navbar: React.FC<{ user: User | null, onLoginClick: () => void }> = ({ use
                <span>{user.points} <span className="text-xs opacity-75">{t('nav.points')}</span></span>
             </div>
             
-            <div className="w-10 h-10 rounded-full bg-indigo-100 border-2 border-white shadow-sm overflow-hidden cursor-pointer">
-              <img src={user.avatar} alt="Profile" className="w-full h-full object-cover" />
+            <div className="relative">
+              <div 
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="w-10 h-10 rounded-full bg-indigo-100 border-2 border-white shadow-sm overflow-hidden cursor-pointer"
+              >
+                <img 
+                  src={user.avatar_url || user.avatar || `https://ui-avatars.com/api/?name=${user.username}&background=random`} 
+                  alt="Profile" 
+                  className="w-full h-full object-cover" 
+                />
+              </div>
+              {showUserMenu && (
+                <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-xl py-2 z-50">
+                  <div className="px-4 py-2 border-b border-slate-100">
+                    <p className="font-semibold text-slate-900">{user.username}</p>
+                    <p className="text-xs text-slate-500">{user.email}</p>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setShowProfileModal(true);
+                      setShowUserMenu(false);
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 text-slate-700"
+                  >
+                    个人信息
+                  </button>
+                  <button onClick={handleLogout} className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 text-red-600">
+                    Logout
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -98,81 +143,101 @@ const Navbar: React.FC<{ user: User | null, onLoginClick: () => void }> = ({ use
         )}
       </div>
     </nav>
+    {showProfileModal && (
+      <ProfileModal
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+      />
+    )}
+    </>
   );
 };
 
-const UserLayout: React.FC<{ user: User | null, onLoginOpen: () => void }> = ({ user, onLoginOpen }) => {
+const UserLayout: React.FC<{ onLoginOpen: () => void }> = ({ onLoginOpen }) => {
   return (
     <div className="min-h-screen bg-[#f8fafc]">
-      <Navbar user={user} onLoginClick={onLoginOpen} />
+      <Navbar onLoginClick={onLoginOpen} />
       <Outlet />
     </div>
   );
 };
 
+const ProtectedRoute: React.FC<{ children: ReactNode; requiredRole?: UserRole }> = ({ children, requiredRole }) => {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <div className="flex min-h-[60vh] items-center justify-center text-slate-500">Loading...</div>;
+  }
+
+  if (!user) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (requiredRole && user.role !== requiredRole) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <>{children}</>;
+};
+
 const AppContent: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
   const [isAuthModalOpen, setAuthModalOpen] = useState(false);
-  const navigate = useNavigate();
 
-  const handleLogin = (isAdmin: boolean) => {
-    setUser({
-      id: isAdmin ? 'admin1' : 'u1',
-      name: isAdmin ? 'Admin User' : 'John Doe',
-      avatar: isAdmin ? 'https://ui-avatars.com/api/?name=Admin&background=0D8ABC&color=fff' : 'https://ui-avatars.com/api/?name=John+Doe&background=random',
-      email: isAdmin ? 'admin@lumina.com' : 'john@example.com',
-      points: isAdmin ? 9999 : 100,
-      role: isAdmin ? UserRole.ADMIN : UserRole.USER,
-      unlockedArticles: []
-    });
-    setAuthModalOpen(false);
-    if (isAdmin) navigate('/admin');
-  };
-
-  const handleNavigate = (page: string) => {
-    if (page === 'view') navigate('/article/1');
-    else navigate('/');
-  };
-
-  const handlePurchase = (cost: number) => {
-    if (user) {
-      setUser({ ...user, points: user.points - cost, unlockedArticles: [...user.unlockedArticles, '1'] });
-    }
-  };
-
-  const handleRecharge = (amount: number) => {
-    if (user) {
-      const confirm = window.confirm(`Purchase ${amount} points? (Mock Payment)`);
-      if (confirm) {
-        setUser({ ...user, points: user.points + amount });
-        alert(`Success! Added ${amount} points.`);
-        navigate('/');
-      }
-    } else {
-      setAuthModalOpen(true);
-    }
-  };
+  useEffect(() => {
+    const handler = () => setAuthModalOpen(true);
+    window.addEventListener('open-auth-modal', handler);
+    return () => window.removeEventListener('open-auth-modal', handler);
+  }, []);
 
   return (
     <>
       <Routes>
+        {/* OAuth Callback Routes - Must be before UserLayout */}
+        <Route path="/auth/callback/success" element={<OAuthSuccess />} />
+        <Route path="/auth/callback/error" element={<OAuthError />} />
+        <Route path="/auth/callback/qq" element={<OAuthCallback />} />
+        <Route path="/auth/callback/wechat" element={<OAuthCallback />} />
+        <Route path="/auth/callback/google" element={<OAuthCallback />} />
+        <Route path="/auth/callback/github" element={<OAuthCallback />} />
+
         {/* Public / User Routes */}
-        <Route element={<UserLayout user={user} onLoginOpen={() => setAuthModalOpen(true)} />}>
-           <Route path="/" element={<Home onNavigate={handleNavigate} />} />
+        <Route element={<UserLayout onLoginOpen={() => setAuthModalOpen(true)} />}>
+           <Route path="/" element={<Home />} />
            <Route path="/resources" element={<Resources />} />
-           <Route path="/pricing" element={<Pricing onRecharge={handleRecharge} />} />
-           <Route path="/article/:id" element={<ArticleView user={user} onPurchase={handlePurchase} />} />
+           <Route path="/pricing" element={<Pricing />} />
+           <Route path="/article/:id" element={<ArticleView />} />
         </Route>
 
         {/* Admin Routes */}
-        <Route path="/admin" element={user && user.role === UserRole.ADMIN ? <AdminPanel /> : <Navigate to="/" />} />
-        <Route path="/admin/editor" element={user && user.role === UserRole.ADMIN ? <Editor /> : <Navigate to="/" />} />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute requiredRole="ADMIN">
+              <AdminPanel />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/editor"
+          element={
+            <ProtectedRoute requiredRole="ADMIN">
+              <Editor />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/editor/:resourceId"
+          element={
+            <ProtectedRoute requiredRole="ADMIN">
+              <Editor />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
 
       <AuthModal 
         isOpen={isAuthModalOpen} 
         onClose={() => setAuthModalOpen(false)} 
-        onLogin={handleLogin}
       />
     </>
   );
@@ -181,9 +246,11 @@ const AppContent: React.FC = () => {
 const App: React.FC = () => {
   return (
     <LanguageProvider>
-      <HashRouter>
-        <AppContent />
-      </HashRouter>
+      <AuthProvider>
+        <BrowserRouter>
+          <AppContent />
+        </BrowserRouter>
+      </AuthProvider>
     </LanguageProvider>
   );
 };

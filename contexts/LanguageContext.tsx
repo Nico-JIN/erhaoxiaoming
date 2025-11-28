@@ -11,7 +11,17 @@ interface LanguageContextType {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [language, setLanguage] = useState<Language>('en');
+  // 从 localStorage 读取保存的语言，如果没有则使用默认语言 'zh'
+  const [language, setLanguageState] = useState<Language>(() => {
+    const saved = localStorage.getItem('app_language');
+    return (saved as Language) || 'zh';
+  });
+
+  // 封装 setLanguage 以同时保存到 localStorage
+  const setLanguage = (lang: Language) => {
+    setLanguageState(lang);
+    localStorage.setItem('app_language', lang);
+  };
 
   const t = (path: string, params?: Record<string, string | number>): string => {
     const keys = path.split('.');
