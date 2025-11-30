@@ -12,6 +12,7 @@ import Resources from './pages/Resources';
 import OAuthCallback from './pages/OAuthCallback';
 import OAuthSuccess from './pages/OAuthSuccess';
 import OAuthError from './pages/OAuthError';
+import PageTracker from './components/PageTracker';
 import { Search, Wallet, Globe } from 'lucide-react';
 import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -191,6 +192,7 @@ const AppContent: React.FC = () => {
 
   return (
     <>
+      <PageTracker />
       <Routes>
         {/* OAuth Callback Routes - Must be before UserLayout */}
         <Route path="/auth/callback/success" element={<OAuthSuccess />} />

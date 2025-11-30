@@ -52,6 +52,23 @@ export interface OperationLogFilters {
   resource_type?: string;
 }
 
+export interface VisitStats {
+  total_visits: number;
+  unique_visitors: number;
+  avg_session_duration: number;
+}
+
+export interface VisitorLog {
+  id: number;
+  page_path: string;
+  ip_address: string;
+  user_agent: string;
+  user_id?: string;
+  session_id: string;
+  referrer?: string;
+  created_at: string;
+}
+
 class AdminService {
   async getStats(): Promise<DashboardStats> {
     const response = await api.get<DashboardStats>('/api/admin/dashboard');
@@ -116,6 +133,23 @@ class AdminService {
   async batchDeleteResources(resourceIds: string[]): Promise<{ deleted_count: number; total_requested: number; errors?: string[]; message: string }> {
     const response = await api.post('/api/admin/resources/batch-delete', {
       resource_ids: resourceIds,
+    });
+    return response.data;
+  }
+
+  async updateResourceStats(resourceId: string, stats: { views?: number; downloads?: number }): Promise<Resource> {
+    const response = await api.put<ResourceDto>(`/api/admin/resources/${resourceId}/stats`, stats);
+    return parseResourceDto(response.data);
+  }
+
+  async getVisitStats(): Promise<VisitStats> {
+    const response = await api.get<VisitStats>('/api/admin/analytics/visits');
+    return response.data;
+  }
+
+  async getVisitorLogs(skip = 0, limit = 50): Promise<{ total: number; logs: VisitorLog[] }> {
+    const response = await api.get<{ total: number; logs: VisitorLog[] }>('/api/admin/analytics/visitor-logs', {
+      params: { skip, limit },
     });
     return response.data;
   }

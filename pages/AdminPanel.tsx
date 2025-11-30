@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useNavigate } from 'react-router-dom';
-import adminService, { DashboardStats, OperationLog, UserManagement } from '../services/adminService';
+
 import type { Resource } from '../services/resourceService';
 import categoryService, { Category } from '../services/categoryService';
 import pointsService, { PointTransaction } from '../services/pointsService';
@@ -28,6 +28,7 @@ import uploadService from '../services/uploadService';
 import ImageCropper from '../components/ImageCropper';
 import NotificationSound from '../components/NotificationSound';
 import rechargeService, { RechargePlan, RechargeOrder } from '../services/rechargeService';
+import adminService, { DashboardStats, OperationLog, UserManagement, VisitStats, VisitorLog } from '../services/adminService';
 
 type AdminTab = 'dashboard' | 'users' | 'content' | 'finance' | 'categories' | 'payment' | 'logs' | 'analytics';
 
@@ -46,6 +47,9 @@ const AdminPanel: React.FC = () => {
   };
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [visitStats, setVisitStats] = useState<VisitStats | null>(null);
+  const [visitorLogs, setVisitorLogs] = useState<VisitorLog[]>([]);
+  const [visitorLogsTotal, setVisitorLogsTotal] = useState(0);
   const [users, setUsers] = useState<UserManagement[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
   const [transactions, setTransactions] = useState<PointTransaction[]>([]);
@@ -104,6 +108,11 @@ const AdminPanel: React.FC = () => {
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [selectedResources, setSelectedResources] = useState<string[]>([]);
 
+  // Stats Editing State
+  const [showStatsModal, setShowStatsModal] = useState(false);
+  const [editingStatsResource, setEditingStatsResource] = useState<Resource | null>(null);
+  const [statsForm, setStatsForm] = useState({ views: 0, downloads: 0 });
+
   const slugify = (value: string) =>
     value
       .toLowerCase()
@@ -133,6 +142,12 @@ const AdminPanel: React.FC = () => {
       setLogsLoading(true);
       const data = await adminService.getLogs({ limit: 100 });
       setLogs(data);
+      // Also refresh visitor stats when on Analytics tab
+      const visitData = await adminService.getVisitStats();
+      setVisitStats(visitData);
+      const visitorLogsData = await adminService.getVisitorLogs();
+      setVisitorLogs(visitorLogsData.logs);
+      setVisitorLogsTotal(visitorLogsData.total);
     } catch (error) {
       console.error('Failed to load logs', error);
       setMessage(t('admin.logsLoadError'));
@@ -148,7 +163,7 @@ const AdminPanel: React.FC = () => {
   const loadAllData = async () => {
     try {
       setLoading(true);
-      const [dashboard, userList, resourceList, transactionList, categoryList, logsList, paymentQR, plans, orders] = await Promise.all([
+      const [dashboard, userList, resourceList, transactionList, categoryList, logsList, paymentQR, plans, orders, visits, visitorLogsData] = await Promise.all([
         adminService.getStats(),
         adminService.listAllUsers(),
         adminService.listResources({ limit: 50 }),
@@ -158,6 +173,8 @@ const AdminPanel: React.FC = () => {
         paymentService.getQRCodes(),
         rechargeService.getPlans(true),
         rechargeService.getAllOrders().catch(() => []),
+        adminService.getVisitStats().catch(() => null),
+        adminService.getVisitorLogs().catch(() => null),
       ]);
       setStats(dashboard);
       setUsers(userList);
@@ -168,6 +185,11 @@ const AdminPanel: React.FC = () => {
       setQrCodes(paymentQR);
       setRechargePlans(plans);
       setRechargeOrders(orders);
+      setVisitStats(visits);
+      if (visitorLogsData) {
+        setVisitorLogs(visitorLogsData.logs);
+        setVisitorLogsTotal(visitorLogsData.total);
+      }
     } catch (error) {
       console.error('Failed to load admin data', error);
       setMessage(t('admin.loadError'));
@@ -627,6 +649,31 @@ const AdminPanel: React.FC = () => {
     setPlanQRCropType(null);
   };
 
+  const handleEditStats = (resource: Resource) => {
+    setEditingStatsResource(resource);
+    setStatsForm({
+      views: resource.views || 0,
+      downloads: resource.downloads || 0,
+    });
+    setShowStatsModal(true);
+  };
+
+  const handleSaveStats = async () => {
+    if (!editingStatsResource) return;
+    try {
+      await adminService.updateResourceStats(editingStatsResource.id, statsForm);
+      setMessage('文章数据更新成功');
+      setShowStatsModal(false);
+      setEditingStatsResource(null);
+      // Refresh resources
+      const updatedResources = await adminService.listResources({ limit: 50 });
+      setResources(updatedResources);
+    } catch (error) {
+      console.error('Failed to update stats:', error);
+      setMessage('更新失败');
+    }
+  };
+
   // 订单管理
   const refreshOrders = async () => {
     try {
@@ -963,6 +1010,12 @@ const AdminPanel: React.FC = () => {
                     className="px-3 py-1 text-xs rounded-lg border border-slate-200 hover:bg-slate-100"
                   >
                     {t('admin.contentTable.edit')}
+                  </button>
+                  <button
+                    onClick={() => handleEditStats(resource)}
+                    className="px-3 py-1 text-xs rounded-lg border border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+                  >
+                    数据
                   </button>
                 </td>
               </tr>
@@ -1510,23 +1563,21 @@ const AdminPanel: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                 <h3 className="text-slate-500 text-sm font-medium mb-2">Total Visits</h3>
-                <p className="text-3xl font-bold text-slate-900">1,234</p>
-                <div className="mt-2 text-xs text-emerald-600 flex items-center">
-                  <ArrowUpRight size={12} className="mr-1" />
-                  +12.5% from last month
+                <p className="text-3xl font-bold text-slate-900">{visitStats?.total_visits.toLocaleString() || 0}</p>
+                <div className="mt-2 text-xs text-slate-500 flex items-center">
+                  All time page views
                 </div>
               </div>
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                 <h3 className="text-slate-500 text-sm font-medium mb-2">Unique Visitors</h3>
-                <p className="text-3xl font-bold text-slate-900">856</p>
-                <div className="mt-2 text-xs text-emerald-600 flex items-center">
-                  <ArrowUpRight size={12} className="mr-1" />
-                  +8.2% from last month
+                <p className="text-3xl font-bold text-slate-900">{visitStats?.unique_visitors.toLocaleString() || 0}</p>
+                <div className="mt-2 text-xs text-slate-500 flex items-center">
+                  Distinct sessions
                 </div>
               </div>
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                 <h3 className="text-slate-500 text-sm font-medium mb-2">Avg. Session Duration</h3>
-                <p className="text-3xl font-bold text-slate-900">4m 12s</p>
+                <p className="text-3xl font-bold text-slate-900">{visitStats?.avg_duration || 'N/A'}</p>
                 <div className="mt-2 text-xs text-slate-400 flex items-center">
                   <Activity size={12} className="mr-1" />
                   Stable
@@ -1536,10 +1587,58 @@ const AdminPanel: React.FC = () => {
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
               <div className="p-6 border-b border-slate-100">
-                <h3 className="font-bold text-slate-800">Recent Activity</h3>
+                <h3 className="font-bold text-slate-800">访问记录</h3>
+                <p className="text-sm text-slate-500 mt-1">共 {visitorLogsTotal} 条记录</p>
               </div>
-              <div className="p-6 text-center text-slate-400 text-sm italic">
-                Activity logs will appear here...
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">访问时间</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">页面路径</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">IP地址</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">来源</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-slate-200">
+                    {visitorLogs.length > 0 ? (
+                      visitorLogs.map((log) => (
+                        <tr key={log.id} className="hover:bg-slate-50">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
+                            {new Date(log.created_at).toLocaleString('zh-CN', {
+                              year: 'numeric',
+                              month: '2-digit',
+                              day: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit',
+                              hour12: false
+                            })}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-slate-600">
+                            <code className="bg-slate-100 px-2 py-1 rounded text-xs">{log.page_path}</code>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
+                            {log.ip_address}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-slate-500">
+                            {log.referrer ? (
+                              <span className="text-xs truncate max-w-xs block">{log.referrer}</span>
+                            ) : (
+                              <span className="text-slate-400 italic">直接访问</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="px-6 py-8 text-center text-slate-400 text-sm italic">
+                          暂无访问记录
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -1566,6 +1665,48 @@ const AdminPanel: React.FC = () => {
           onCancel={handlePlanQRCropCancel}
           aspectRatio={1}
         />
+      )}
+
+      {showStatsModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
+            <h3 className="text-xl font-bold text-slate-800 mb-4">编辑文章数据</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">阅读量 (Views)</label>
+                <input
+                  type="number"
+                  value={statsForm.views}
+                  onChange={(e) => setStatsForm({ ...statsForm, views: parseInt(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">下载量 (Downloads)</label>
+                <input
+                  type="number"
+                  value={statsForm.downloads}
+                  onChange={(e) => setStatsForm({ ...statsForm, downloads: parseInt(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-6">
+              <button
+                onClick={() => setShowStatsModal(false)}
+                className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSaveStats}
+                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       {/* Sidebar */}
       <div className="w-64 bg-white border-r border-slate-200 flex flex-col">

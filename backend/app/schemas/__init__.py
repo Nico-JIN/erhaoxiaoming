@@ -143,8 +143,12 @@ class ResourceUpdate(BaseModel):
     status: Optional[ResourceStatus] = None
     is_featured: Optional[bool] = None
     tags: Optional[str] = None
-    is_pinned: Optional[bool] = None
     thumbnail_url: Optional[str] = None
+
+
+class ResourceStatsUpdate(BaseModel):
+    views: Optional[int] = None
+    downloads: Optional[int] = None
 
 
 class ResourceResponse(ResourceBase):
@@ -267,6 +271,14 @@ class DashboardStats(BaseModel):
     total_articles: int
     user_growth: float
     revenue_growth: float
+
+
+class VisitStatsResponse(BaseModel):
+    total_visits: int
+    unique_visitors: int
+    avg_session_duration: int
+    # visits_trend: List[dict]
+
 
 
 class ResourceFeedItem(BaseModel):

@@ -3,6 +3,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { Lock, FileText, Download, List, Heart, MessageCircle, Send, Eye } from 'lucide-react';
 import { marked } from 'marked';
+import api from '../services/api';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import resourceService, { Resource } from '../services/resourceService';
@@ -42,7 +43,7 @@ const ArticleView: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showTOC, setShowTOC] = useState(true);
   const [activeHeading, setActiveHeading] = useState<string>('');
-  
+
   // 点赞和评论状态
   const [isLiked, setIsLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
@@ -63,7 +64,7 @@ const ArticleView: React.FC = () => {
       div.innerHTML = rawHtml;
       const headings = div.querySelectorAll('h1, h2, h3, h4');
       headings.forEach((heading, index) => {
-        heading.id = `heading-${index}`;
+        heading.id = `heading - ${index} `;
       });
       return div.innerHTML;
     }
@@ -77,29 +78,28 @@ const ArticleView: React.FC = () => {
     div.innerHTML = htmlContent as string;
     const headings = div.querySelectorAll('h1, h2, h3, h4');
     return Array.from(headings).map((heading, index) => ({
-      id: `heading-${index}`,
+      id: `heading - ${index} `,
       text: heading.textContent || '',
       level: parseInt(heading.tagName.substring(1))
     }));
   }, [htmlContent]);
-
   useEffect(() => {
     const loadResource = async () => {
       if (!id) return;
       try {
         setLoading(true);
-        setError(null);  // 重置错误状态
-        const data = await resourceService.getResource(id);  // UUID string
+        setError(null);
+        const data = await resourceService.getResource(id);
         setResource(data);
         setIsUnlocked(data.is_free || data.points_required === 0 || data.is_purchased_by_user === true);
-        
-        // 加载点赞和评论数据
+
         setLikeCount(data.like_count || 0);
         setIsLiked(data.is_liked_by_user || false);
-        
-        // 加载评论
-        const commentsData = await interactionsService.getComments(id);  // UUID string
+
+        const commentsData = await interactionsService.getComments(id);
         setComments(commentsData);
+
+
       } catch (err) {
         console.error('Failed to load resource', err);
         setError('Article not found or unavailable.');
@@ -108,27 +108,27 @@ const ArticleView: React.FC = () => {
       }
     };
     loadResource();
-  }, [id]);
+  }, [id, location.pathname]);
 
   // Monitor scroll to highlight active heading
   useEffect(() => {
     const handleScroll = () => {
       const headings = document.querySelectorAll('h1[id], h2[id], h3[id], h4[id]');
       let current = '';
-      
+
       headings.forEach((heading) => {
         const rect = heading.getBoundingClientRect();
         if (rect.top <= 150) {
           current = heading.id;
         }
       });
-      
+
       setActiveHeading(current);
     };
 
     window.addEventListener('scroll', handleScroll);
     handleScroll();
-    
+
     return () => window.removeEventListener('scroll', handleScroll);
   }, [htmlContent]);
 
@@ -161,11 +161,27 @@ const ArticleView: React.FC = () => {
     }
   };
 
-  const handleDownload = () => {
-    if (!resource?.file_url) return;
-    window.open(resource.file_url, '_blank');
+  const handleDownload = async () => {
+    if (!resource) return;
+    try {
+      const response = await api.get(`/api/resources/${resource.id}/download`);
+      if (response.data.download_url) {
+        window.open(response.data.download_url, '_blank');
+        // Update local count
+        setResource(prev => prev ? { ...prev, downloads: (prev.downloads || 0) + 1 } : null);
+      }
+    } catch (error) {
+      console.error('Download failed:', error);
+      // If 401/402, show payment modal or login
+      if (resource.points_required > 0 && !user) {
+        // Trigger login or show message
+        alert(t('auth.loginRequired'));
+      } else if (resource.points_required > 0 && user && user.points < resource.points_required) {
+        setShowPaymentModal(true);
+      }
+    }
   };
-  
+
   // 点赞处理
   const handleLike = async () => {
     if (!user) {
@@ -173,7 +189,7 @@ const ArticleView: React.FC = () => {
       return;
     }
     if (!resource) return;
-    
+
     try {
       if (isLiked) {
         await interactionsService.unlikeResource(resource.id);
@@ -188,11 +204,11 @@ const ArticleView: React.FC = () => {
       console.error('Failed to toggle like:', error);
     }
   };
-  
+
   // 评论处理
   const handleSubmitComment = async (content: string) => {
     if (!resource) return;
-    
+
     try {
       const newComment = await interactionsService.createComment(resource.id, content);
       setComments(prev => [newComment, ...prev]);
@@ -202,11 +218,11 @@ const ArticleView: React.FC = () => {
       throw error;
     }
   };
-  
+
   // 回复评论
   const handleSubmitReply = async (content: string) => {
     if (!resource || !replyToComment) return;
-    
+
     try {
       await interactionsService.createComment(resource.id, content, replyToComment.id);
       // 重新加载评论
@@ -218,11 +234,11 @@ const ArticleView: React.FC = () => {
       throw error;
     }
   };
-  
+
   // 删除评论
   const handleDeleteComment = async (commentId: number) => {
     if (!confirm('确定要删除这条评论吗？')) return;
-    
+
     try {
       await interactionsService.deleteComment(commentId);
       const updatedComments = await interactionsService.getComments(resource!.id);
@@ -257,7 +273,7 @@ const ArticleView: React.FC = () => {
         <h1 className="text-5xl md:text-6xl font-bold text-slate-900 leading-tight mb-6">
           {resource.title}
         </h1>
-        
+
         {/* 元数据区域：发布时间和阅读量 */}
         <div className="flex items-center gap-4 mb-6">
           <div className="flex items-center gap-2 text-slate-500">
@@ -268,22 +284,22 @@ const ArticleView: React.FC = () => {
               {new Date(resource.published_at || resource.created_at).toLocaleDateString(language === 'zh' ? 'zh-CN' : undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
             </span>
           </div>
-          
+
           <div className="w-1 h-1 rounded-full bg-slate-300"></div>
-          
+
           <div className="flex items-center gap-2 text-slate-500">
             <Eye size={16} className="text-indigo-500" />
             <span className="text-sm font-semibold text-slate-700">{formatCount(resource.views || 0)}</span>
             <span className="text-sm font-medium text-slate-500">阅读</span>
           </div>
         </div>
-        
+
         <div className="flex items-center justify-between border-b border-slate-200 pb-6 mb-8">
           <div className="flex items-center gap-3">
-            <img 
-              src={resource.author_avatar || `https://ui-avatars.com/api/?name=${resource.author_username || 'Admin'}&background=random`} 
-              alt="Author" 
-              className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm" 
+            <img
+              src={resource.author_avatar || `https://ui-avatars.com/api/?name=${resource.author_username || 'Admin'}&background=random`}
+              alt="Author"
+              className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm"
             />
             <div>
               <p className="font-medium text-slate-900">{resource.author_username || 'Lemind Team'}</p>
@@ -300,10 +316,10 @@ const ArticleView: React.FC = () => {
 
       {/* Cover Image */}
       <div className="rounded-3xl overflow-hidden mb-16">
-        <img 
-          src={resource.thumbnail_url || `https://picsum.photos/seed/${resource.id}/800/400`} 
-          alt="Cover" 
-          className="w-full h-auto object-cover" 
+        <img
+          src={resource.thumbnail_url || `https://picsum.photos/seed/${resource.id}/800/400`}
+          alt="Cover"
+          className="w-full h-auto object-cover"
         />
       </div>
 
@@ -318,8 +334,8 @@ const ArticleView: React.FC = () => {
                 </div>
                 目录导航
               </h3>
-              <button 
-                onClick={() => setShowTOC(!showTOC)} 
+              <button
+                onClick={() => setShowTOC(!showTOC)}
                 className="text-xs text-slate-500 hover:text-slate-700 font-medium transition-colors px-2 py-1 rounded-lg hover:bg-slate-100"
               >
                 {showTOC ? '收起' : '展开'}
@@ -331,13 +347,13 @@ const ArticleView: React.FC = () => {
                 <div className="absolute left-2 top-0 bottom-0 w-1 bg-gradient-to-b from-purple-400 via-violet-500 to-purple-400 rounded-full shadow-sm"></div>
                 <div className="absolute left-[5px] top-0 w-3 h-3 rounded-full bg-purple-600 shadow-md"></div>
                 <div className="absolute left-[5px] bottom-0 w-3 h-3 rounded-full bg-purple-600 shadow-md"></div>
-                
+
                 {/* 藤蔓叶子装饰 */}
                 <div className="absolute left-[-2px] top-[20%] w-4 h-5 rounded-full bg-purple-300 opacity-70 shadow-sm" style={{ transform: 'rotate(-45deg)' }}></div>
                 <div className="absolute left-[-2px] top-[40%] w-3 h-4 rounded-full bg-violet-300 opacity-70 shadow-sm" style={{ transform: 'rotate(30deg)' }}></div>
                 <div className="absolute left-[-2px] top-[60%] w-4 h-5 rounded-full bg-purple-300 opacity-70 shadow-sm" style={{ transform: 'rotate(-60deg)' }}></div>
                 <div className="absolute left-[-2px] top-[80%] w-3 h-4 rounded-full bg-violet-300 opacity-70 shadow-sm" style={{ transform: 'rotate(20deg)' }}></div>
-                
+
                 <ul className="pl-6 space-y-1">
                   {tocItems.map((item, index) => (
                     <li
@@ -350,17 +366,15 @@ const ArticleView: React.FC = () => {
                           e.preventDefault();
                           scrollToHeading(item.id);
                         }}
-                        className={`text-sm w-full text-left py-2 px-3 rounded-lg transition-all relative ${
-                          activeHeading === item.id
-                            ? 'text-slate-900 font-semibold bg-slate-100 shadow-sm'
-                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                        }`}
+                        className={`text-sm w-full text-left py-2 px-3 rounded-lg transition-all relative ${activeHeading === item.id
+                          ? 'text-slate-900 font-semibold bg-slate-100 shadow-sm'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                          }`}
                       >
-                        <span className={`absolute left-[-20px] top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full transition-all ${
-                          activeHeading === item.id
-                            ? 'bg-purple-600 scale-125 shadow-md'
-                            : 'bg-purple-400 opacity-0 group-hover:opacity-100'
-                        }`}></span>
+                        <span className={`absolute left-[-20px] top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full transition-all ${activeHeading === item.id
+                          ? 'bg-purple-600 scale-125 shadow-md'
+                          : 'bg-purple-400 opacity-0 group-hover:opacity-100'
+                          }`}></span>
                         {item.text}
                       </button>
                     </li>
@@ -387,13 +401,13 @@ const ArticleView: React.FC = () => {
               </div>
               <h3 className="text-xl font-bold text-slate-900 mb-2">{t('article.premiumContent')}</h3>
               <p className="text-slate-600 mb-6">{t('article.unlockMsg')}</p>
-              
+
               <div className="flex items-center justify-between bg-slate-50 rounded-xl p-3 mb-6 border border-slate-100">
                 <span className="text-sm font-medium text-slate-600">{t('article.price') || 'Price'}</span>
                 <span className="text-lg font-bold text-indigo-600">{resource.points_required} Pts</span>
               </div>
 
-              <button 
+              <button
                 onClick={() => setShowPaymentModal(true)}
                 className="w-full py-3 bg-indigo-600 text-white rounded-xl font-semibold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition"
               >
@@ -425,7 +439,7 @@ const ArticleView: React.FC = () => {
                 </div>
               </div>
             </div>
-            <button 
+            <button
               onClick={() => handleDownload()}
               className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-700 font-medium shadow-sm hover:text-indigo-600 hover:border-indigo-200 transition-all"
             >
@@ -435,24 +449,23 @@ const ArticleView: React.FC = () => {
           </div>
         </div>
       )}
-      
+
       {/* 点赞和评论区域 */}
       <div className="mt-16 border-t-2 border-slate-200 pt-12">
         {/* 点赞和评论按钮 */}
         <div className="flex items-center gap-4 mb-12">
           <button
             onClick={handleLike}
-            className={`flex items-center gap-3 px-6 py-3 rounded-full font-semibold transition-all shadow-md ${
-              isLiked
-                ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-pink-200 hover:shadow-lg'
-                : 'bg-white border-2 border-slate-200 text-slate-700 hover:border-pink-500 hover:text-pink-500'
-            }`}
+            className={`flex items-center gap-3 px-6 py-3 rounded-full font-semibold transition-all shadow-md ${isLiked
+              ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-pink-200 hover:shadow-lg'
+              : 'bg-white border-2 border-slate-200 text-slate-700 hover:border-pink-500 hover:text-pink-500'
+              }`}
           >
             <Heart size={20} fill={isLiked ? 'currentColor' : 'none'} />
             <span>{isLiked ? t('article.liked') : t('article.like')}</span>
             <span className="font-bold">{formatCount(likeCount)}</span>
           </button>
-          
+
           <button
             onClick={() => {
               if (!user) {
@@ -468,11 +481,11 @@ const ArticleView: React.FC = () => {
             <span className="font-bold">{formatCount(comments.length)}</span>
           </button>
         </div>
-        
+
         {/* 评论列表 */}
         <div className="space-y-6">
           <h3 className="text-xl font-bold text-slate-900">{t('article.comments')} ({comments.length})</h3>
-          
+
           {comments.length === 0 ? (
             <div className="text-center py-12 text-slate-400">
               <MessageCircle size={48} className="mx-auto mb-3 opacity-30" />
@@ -505,7 +518,7 @@ const ArticleView: React.FC = () => {
                       )}
                     </div>
                     <p className="text-slate-700 mb-3 leading-relaxed">{comment.content}</p>
-                    
+
                     <button
                       onClick={() => {
                         if (!user) {
@@ -519,7 +532,7 @@ const ArticleView: React.FC = () => {
                     >
                       {t('article.reply')}
                     </button>
-                    
+
                     {/* 嵌套回复 */}
                     {comment.replies && comment.replies.length > 0 && (
                       <div className="mt-4 space-y-4 pl-4 border-l-2 border-slate-100">
@@ -570,14 +583,14 @@ const ArticleView: React.FC = () => {
               {t('article.confirmMsg', { price: resource.points_required || 0 })}
             </p>
             <div className="flex gap-3">
-              <button 
-                onClick={() => setShowPaymentModal(false)} 
+              <button
+                onClick={() => setShowPaymentModal(false)}
                 className="flex-1 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium"
               >
                 {t('article.cancel')}
               </button>
-              <button 
-                onClick={handleUnlock} 
+              <button
+                onClick={handleUnlock}
                 className="flex-1 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 font-medium"
               >
                 {t('article.confirm')}
@@ -586,7 +599,7 @@ const ArticleView: React.FC = () => {
           </div>
         </div>
       )}
-      
+
       {/* 评论弹窗 */}
       <CommentModal
         isOpen={showCommentModal}
@@ -597,7 +610,7 @@ const ArticleView: React.FC = () => {
         title={t('article.postComment')}
         placeholder={t('article.writeComment')}
       />
-      
+
       {/* 回复弹窗 */}
       <CommentModal
         isOpen={showReplyModal}

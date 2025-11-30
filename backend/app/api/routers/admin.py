@@ -25,6 +25,8 @@ from backend.app.schemas import (
     ResourceListResponse,
     SystemConfigResponse,
     SystemConfigUpdate,
+    ResourceStatsUpdate,
+    VisitStatsResponse,
 )
 from backend.app.services.operations import log_operation
 
@@ -336,4 +338,95 @@ async def batch_delete_resources(
         "total_requested": len(batch_request.resource_ids),
         "errors": errors if errors else None,
         "message": f"Successfully deleted {deleted_count} resources"
+    }
+
+
+@router.put("/resources/{resource_id}/stats", response_model=ResourceListResponse)
+async def update_resource_stats(
+    resource_id: str,
+    stats_update: ResourceStatsUpdate,
+    request: Request,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Update resource statistics (views/downloads)."""
+    resource = db.query(Resource).filter(Resource.id == resource_id).first()
+    if not resource:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
+
+    if stats_update.views is not None:
+        resource.views = stats_update.views
+    if stats_update.downloads is not None:
+        resource.downloads = stats_update.downloads
+
+    db.commit()
+    db.refresh(resource)
+    
+    log_operation(
+        db=db,
+        user_id=current_admin.id,
+        action="RESOURCE_STATS_UPDATE",
+        resource_type="resource",
+        resource_id=str(resource_id),
+        ip_address=request.client.host if request.client else "0.0.0.0",
+        user_agent=request.headers.get("user-agent", ""),
+        details=f"Updated stats: views={stats_update.views}, downloads={stats_update.downloads}"
+    )
+    
+    return resource
+
+
+@router.get("/analytics/visits", response_model=VisitStatsResponse)
+async def get_visit_stats(
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Get website visit statistics."""
+    from backend.app.models import VisitorAnalytics
+    
+    total_visits = db.query(func.count(VisitorAnalytics.id)).scalar() or 0
+    unique_visitors = db.query(func.count(func.distinct(VisitorAnalytics.session_id))).scalar() or 0
+    
+    return {
+        "total_visits": total_visits,
+        "unique_visitors": unique_visitors,
+        "avg_session_duration": 0  # Placeholder
+    }
+
+
+@router.get("/analytics/visitor-logs")
+async def get_visitor_logs(
+    skip: int = 0,
+    limit: int = 50,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Get detailed visitor logs."""
+    from backend.app.models import VisitorAnalytics
+    
+    total = db.query(func.count(VisitorAnalytics.id)).scalar() or 0
+    
+    logs = (
+        db.query(VisitorAnalytics)
+        .order_by(VisitorAnalytics.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    
+    return {
+        "total": total,
+        "logs": [
+            {
+                "id": log.id,
+                "page_path": log.page_path,
+                "ip_address": log.ip_address,
+                "user_agent": log.user_agent,
+                "user_id": log.user_id,
+                "session_id": log.session_id,
+                "referrer": log.referrer,
+                "created_at": log.created_at.isoformat() if log.created_at else None,
+            }
+            for log in logs
+        ]
     }

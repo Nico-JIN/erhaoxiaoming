@@ -47,8 +47,9 @@ app.add_middleware(RateLimitMiddleware, requests_per_minute=100, requests_per_se
 app.add_middleware(IPBlocklistMiddleware)
 
 # Add analytics tracking
-from backend.app.middleware import AnalyticsMiddleware
-app.add_middleware(AnalyticsMiddleware)
+# Disabled: Using PageTracker component in frontend instead to avoid duplicate tracking
+# from backend.app.middleware import AnalyticsMiddleware
+# app.add_middleware(AnalyticsMiddleware)
 
 register_routers(app)
 

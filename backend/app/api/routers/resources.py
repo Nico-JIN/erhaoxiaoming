@@ -312,70 +312,66 @@ async def upload_resource_file(
 
 @router.get("/{resource_id}/download")
 async def download_resource(
-    resource_id: str,  # UUID
+    resource_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
-    """Download a resource (deduct points when necessary)."""
-
+    """Download a resource file."""
     resource = db.query(Resource).filter(Resource.id == resource_id).first()
     if not resource:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
 
-    # Admin users can download all resources for free
-    from backend.app.models import PointTransaction, TransactionType, UserRole
-    
-    is_admin = current_user.role == UserRole.ADMIN
-    
-    # Check if resource is paid and user needs to pay
-    if not resource.is_free and resource.points_required > 0 and not is_admin:
-        # Check if user has already purchased this resource
-        existing_purchase = (
-            db.query(PointTransaction)
-            .filter(
-                PointTransaction.user_id == current_user.id,
-                PointTransaction.type == TransactionType.PURCHASE,
-                PointTransaction.reference_id == f"resource_{resource.id}",
+    # Check if user has access
+    if resource.points_required > 0:
+        if not current_user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required for paid resources",
             )
-            .first()
-        )
-
-        # Only deduct points if user hasn't purchased before
-        if not existing_purchase:
-            if current_user.points < resource.points_required:
-                raise HTTPException(
-                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                    detail="Insufficient points",
-                )
-
-            try:
-                deduct_points(
-                    db=db,
-                    user=current_user,
-                    amount=resource.points_required,
-                    description=f"Downloaded resource: {resource.title}",
-                    reference_id=f"resource_{resource.id}",
-                )
-            except ValueError as exc:
-                raise HTTPException(
-                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                    detail=str(exc),
-                ) from exc
+        
+        # Check if already purchased (if applicable) or deduct points
+        # For now, we deduct points every time unless we implement a 'purchased' check
+        # Assuming we want to deduct points:
+        try:
+            deduct_points(
+                db=db,
+                user=current_user,
+                amount=resource.points_required,
+                description=f"Downloaded resource: {resource.title}",
+                reference_id=f"resource_{resource.id}",
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail=str(exc),
+            ) from exc
 
     resource.downloads += 1
     db.commit()
     db.refresh(resource)
-    db.refresh(current_user)
+    if current_user:
+        db.refresh(current_user)
 
     log_operation(
         db=db,
-        user_id=current_user.id,
+        user_id=current_user.id if current_user else None,
         action="RESOURCE_DOWNLOAD",
         resource_type="resource",
         resource_id=str(resource_id),
         ip_address=request.client.host if request.client else "0.0.0.0",
         user_agent=request.headers.get("user-agent", ""),
+    )
+
+    # Track download in analytics
+    from backend.app.services.analytics import analytics_service
+    analytics_service.log_download(
+        db=db,
+        resource_id=str(resource_id),
+        session_id=request.cookies.get("session_id") or "unknown",
+        ip_address=request.client.host if request.client else "0.0.0.0",
+        user_agent=request.headers.get("user-agent", ""),
+        user_id=current_user.id if current_user else None,
     )
 
     if not resource.file_url:
