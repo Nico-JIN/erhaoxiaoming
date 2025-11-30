@@ -17,13 +17,13 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  
+
   // 图片位置和缩放
   const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 });
   const [imageScale, setImageScale] = useState(1);
   const [isDraggingImage, setIsDraggingImage] = useState(false);
   const [imageDragStart, setImageDragStart] = useState({ x: 0, y: 0 });
-  
+
   // 裁剪框状态
   const [cropBox, setCropBox] = useState({ x: 50, y: 50, width: 300, height: 300 });
   const [isDragging, setIsDragging] = useState(false);
@@ -36,13 +36,21 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
     img.src = image;
     img.onload = () => {
       setImageSize({ width: img.width, height: img.height });
-      // 初始化裁剪框大小 - 强制正方形，默认较大以显示更多内容
-      const size = Math.min(500, 600 * 0.8);
+      // Initialize crop box size
+      const maxSize = 500;
+      let width = Math.min(maxSize, 600 * 0.8);
+      let height = width / aspectRatio;
+
+      if (height > 600 * 0.8) {
+        height = 600 * 0.8;
+        width = height * aspectRatio;
+      }
+
       setCropBox({
-        x: (600 - size) / 2,
-        y: (600 - size) / 2,
-        width: size,
-        height: size // 强制1:1正方形
+        x: (600 - width) / 2,
+        y: (600 - height) / 2,
+        width: width,
+        height: height
       });
     };
   }, [image, aspectRatio]);
@@ -89,43 +97,43 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
     } else if (isResizing) {
       setCropBox(prev => {
         let newBox = { ...prev };
-        
-        // 强制1:1正方形裁剪
+
+        // Dynamic aspect ratio resizing
         if (isResizing.includes('e')) {
           const newWidth = Math.max(50, Math.min(600 - prev.x, prev.width + dx));
           newBox.width = newWidth;
-          newBox.height = newWidth; // 1:1
+          newBox.height = newWidth / aspectRatio;
         }
         if (isResizing.includes('w')) {
           const newWidth = Math.max(50, prev.width - dx);
           const widthDiff = prev.width - newWidth;
           newBox.x = Math.max(0, prev.x + widthDiff);
           newBox.width = newWidth;
-          newBox.height = newWidth; // 1:1
+          newBox.height = newWidth / aspectRatio;
         }
         if (isResizing.includes('s')) {
           const newHeight = Math.max(50, Math.min(600 - prev.y, prev.height + dy));
           newBox.height = newHeight;
-          newBox.width = newHeight; // 1:1
+          newBox.width = newHeight * aspectRatio;
         }
         if (isResizing.includes('n')) {
           const newHeight = Math.max(50, prev.height - dy);
           const heightDiff = prev.height - newHeight;
           newBox.y = Math.max(0, prev.y + heightDiff);
           newBox.height = newHeight;
-          newBox.width = newHeight; // 1:1
+          newBox.width = newHeight * aspectRatio;
         }
-        
-        // 确保不超出边界
+
+        // Boundary checks
         if (newBox.x + newBox.width > 600) {
           newBox.width = 600 - newBox.x;
-          newBox.height = newBox.width;
+          newBox.height = newBox.width / aspectRatio;
         }
         if (newBox.y + newBox.height > 600) {
           newBox.height = 600 - newBox.y;
-          newBox.width = newBox.height;
+          newBox.width = newBox.height * aspectRatio;
         }
-        
+
         return newBox;
       });
     }
@@ -155,47 +163,47 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
           return;
         }
 
-        // 固定输出尺寸：400x400
-        const OUTPUT_SIZE = 400;
-        canvas.width = OUTPUT_SIZE;
-        canvas.height = OUTPUT_SIZE;
+        // Output size based on aspect ratio
+        const OUTPUT_WIDTH = 800;
+        const OUTPUT_HEIGHT = OUTPUT_WIDTH / aspectRatio;
 
-        // 容器大小
+        canvas.width = OUTPUT_WIDTH;
+        canvas.height = OUTPUT_HEIGHT;
+
+        // Container size
         const containerSize = 600;
-        
-        // 计算图片在容器中的实际显示尺寸（保持宽高比）
+
+        // Calculate image display dimensions
         const imgAspect = img.width / img.height;
         let displayWidth, displayHeight;
-        
+
         if (imgAspect > 1) {
-          // 图片更宽，以宽度为准
           displayWidth = containerSize;
           displayHeight = containerSize / imgAspect;
         } else {
-          // 图片更高，以高度为准
           displayHeight = containerSize;
           displayWidth = containerSize * imgAspect;
         }
-        
-        // 应用缩放
+
+        // Apply scale
         displayWidth *= imageScale;
         displayHeight *= imageScale;
-        
-        // 计算图片居中后的起始位置（object-contain 居中效果）
+
+        // Calculate centered position
         const imageStartX = (containerSize - displayWidth) / 2;
         const imageStartY = (containerSize - displayHeight) / 2;
-        
-        // 计算缩放比例（原图尺寸 / 显示尺寸）
+
+        // Calculate scale ratio (original / displayed)
         const scaleX = img.width / displayWidth;
         const scaleY = img.height / displayHeight;
-        
-        // 计算裁剪框相对于图片的位置（考虑图片位置偏移 + 居中偏移）
+
+        // Calculate crop coordinates relative to original image
         const cropX = (cropBox.x - imagePosition.x - imageStartX) * scaleX;
         const cropY = (cropBox.y - imagePosition.y - imageStartY) * scaleY;
         const cropWidth = cropBox.width * scaleX;
         const cropHeight = cropBox.height * scaleY;
 
-        // 绘制并缩放到固定尺寸
+        // Draw and resize
         ctx.drawImage(
           img,
           cropX,
@@ -204,8 +212,8 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
           cropHeight,
           0,
           0,
-          OUTPUT_SIZE,
-          OUTPUT_SIZE
+          OUTPUT_WIDTH,
+          OUTPUT_HEIGHT
         );
 
         canvas.toBlob((blob) => {
@@ -253,7 +261,7 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
   };
 
   return (
-    <div 
+    <div
       className="fixed inset-0 bg-black/95 z-[100] flex flex-col"
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
@@ -286,7 +294,7 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
 
       {/* 主体区域 */}
       <div className="flex-1 flex items-center justify-center p-8">
-        <div 
+        <div
           ref={containerRef}
           className="relative overflow-hidden"
           style={{ width: 600, height: 600 }}

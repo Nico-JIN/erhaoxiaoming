@@ -1,8 +1,26 @@
-
 import React, { useState, useRef, useEffect } from 'react';
-import { Save, Upload, Sparkles, Eye, EyeOff, Bold, Italic, Heading, Quote, Code, List, Link as LinkIcon, Image as ImageIcon, Terminal, X, Wand2, ArrowLeft } from 'lucide-react';
+import { Save, Upload, Sparkles, Eye, EyeOff, Bold, Italic, Heading, Quote, Code, List, Link as LinkIcon, Image as ImageIcon, Terminal, X, Wand2, ArrowLeft, Video, FileText } from 'lucide-react';
 import { enhanceContent, generateSummary } from '../services/geminiService';
 import { marked } from 'marked';
+
+// Configure marked to add no-referrer policy to images (for external hotlink protection bypass)
+try {
+  const renderer = new marked.Renderer();
+  const originalImage = renderer.image;
+
+  renderer.image = function (this: any, token: any) {
+    const html = originalImage.call(this, token);
+    if (typeof html === 'string') {
+      return html.replace('<img', '<img referrerpolicy="no-referrer"');
+    }
+    return html;
+  };
+
+  marked.use({ renderer });
+} catch (error) {
+  console.warn('Failed to configure marked renderer:', error);
+}
+
 import { useLanguage } from '../contexts/LanguageContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import resourceService, { Resource } from '../services/resourceService';
@@ -14,19 +32,17 @@ const Editor: React.FC = () => {
   const { t } = useLanguage();
   const navigate = useNavigate();
   const { resourceId } = useParams<{ resourceId?: string }>();
-  const resourceIdNumber = resourceId !== undefined ? Number(resourceId) : null;
-  const resourceNumericId = resourceIdNumber !== null && !Number.isNaN(resourceIdNumber) ? resourceIdNumber : null;
-  const isEditing = resourceNumericId !== null;
+  const isEditing = !!resourceId;  // If resourceId exists, we're editing
   const [title, setTitle] = useState('');
   const [content, setContent] = useState(`# Welcome to the Editor
 
 Start writing your knowledge here. 
 
 ## Features
-- Full Markdown Support
-- AI Enhancement
-- Split Preview
-- **Image Uploads** (Try dragging an image here!)
+  - Full Markdown Support
+    - AI Enhancement
+      - Split Preview
+        - ** Image Uploads ** (Try dragging an image here!)
 
 1. Type on the left
 2. See result on the right
@@ -60,7 +76,46 @@ Start writing your knowledge here.
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
+  const batchFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Toast notification state
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  // Batch upload state
+  const [batchAttachments, setBatchAttachments] = useState<Array<{
+    filename: string;
+    url: string;
+    size_formatted: string;
+    object_name: string;
+  }>>([]);
+  const [batchUploadProgress, setBatchUploadProgress] = useState(0);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  // Debounce hook
+  const useDebounce = (value: string, delay: number) => {
+    const [debouncedValue, setDebouncedValue] = useState(value);
+    useEffect(() => {
+      const handler = setTimeout(() => {
+        setDebouncedValue(value);
+      }, delay);
+      return () => {
+        clearTimeout(handler);
+      };
+    }, [value, delay]);
+    return debouncedValue;
+  };
+
+  const debouncedContent = useDebounce(content, 300);
+
+  const previewHtml = React.useMemo(() => {
+    return marked.parse(debouncedContent);
+  }, [debouncedContent]);
 
   // Scroll Synchronization: Editor -> Preview
   const handleScroll = () => {
@@ -95,19 +150,19 @@ Start writing your knowledge here.
 
     switch (syntax) {
       case 'b':
-        newText = `${before}**${selection || 'Bold Text'}**${after}`;
+        newText = `${before}** ${selection || 'Bold Text'}** ${after} `;
         newCursorPos = selection ? end + 4 : start + 2 + 9;
         break;
       case 'i':
-        newText = `${before}_${selection || 'Italic Text'}_${after}`;
+        newText = `${before}_${selection || 'Italic Text'}_${after} `;
         newCursorPos = selection ? end + 2 : start + 1 + 11;
         break;
       case 'h2':
-        newText = `${before}\n## ${selection || 'Heading 2'}\n${after}`;
+        newText = `${before} \n## ${selection || 'Heading 2'} \n${after} `;
         newCursorPos = newText.length - after.length - 1;
         break;
       case 'quote':
-        newText = `${before}\n> ${selection || 'Blockquote'}\n${after}`;
+        newText = `${before} \n > ${selection || 'Blockquote'} \n${after} `;
         newCursorPos = newText.length - after.length - 1;
         break;
       case 'code':
@@ -155,11 +210,20 @@ ${after}`;
     }
 
     try {
-      const uploaded = await uploadService.uploadImage(file);
+      const uploaded = await uploadService.uploadImage(file, {
+        onProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            console.log(`📸 图片上传进度: ${percentCompleted}%`);
+          }
+        },
+      });
       const imageUrl = uploaded.resolvedUrl || uploadService.getPublicUrl(uploaded.object_name) || '';
       if (!imageUrl) {
         throw new Error('Image URL missing');
       }
+
+      showToast('✅ 图片上传成功!', 'success');
 
       const markdown = `\n![${file.name}](${imageUrl})\n`;
 
@@ -184,8 +248,97 @@ ${after}`;
       }, 0);
     } catch (error) {
       console.error('Image upload failed', error);
-      alert('Failed to upload image. Please try again.');
+      showToast('❌ 图片上传失败', 'error');
     }
+  };
+
+  // Handle Video Upload
+  const processVideo = async (file: File) => {
+    if (!file.type.startsWith('video/')) {
+      alert('Please upload a video file.');
+      return;
+    }
+
+    try {
+      const uploaded = await uploadService.uploadVideo(file, {
+        onProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            console.log(`🎥 视频上传进度: ${percentCompleted}%`);
+          }
+        },
+      });
+      const videoUrl = uploaded.resolvedUrl || uploadService.getPublicUrl(uploaded.object_name) || '';
+      if (!videoUrl) {
+        throw new Error('Video URL missing');
+      }
+
+      showToast('✅ 视频上传成功!', 'success');
+
+      const videoMarkdown = `\n<video controls width="100%" style="max-width: 800px; border-radius: 8px;">\n  <source src="${videoUrl}" type="${file.type}">\n  Your browser does not support the video tag.\n</video>\n`;
+
+      const textarea = textareaRef.current;
+      if (!textarea) {
+        setContent((prev) => prev + videoMarkdown);
+        return;
+      }
+
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const text = textarea.value;
+
+      const newText = text.substring(0, start) + videoMarkdown + text.substring(end);
+      setContent(newText);
+
+      setTimeout(() => {
+        textarea.focus();
+        const newPos = start + videoMarkdown.length;
+        textarea.setSelectionRange(newPos, newPos);
+        handleScroll();
+      }, 0);
+    } catch (error) {
+      console.error('Video upload failed:', error);
+      showToast('Video upload failed', 'error');
+    }
+  };
+
+  const handleBatchFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []) as File[];
+    if (files.length === 0) return;
+
+    try {
+      setBatchUploadProgress(0);
+      const result = await uploadService.batchUpload(files, {
+        onProgress: (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          setBatchUploadProgress(percentCompleted);
+        }
+      });
+
+      setBatchAttachments(prev => [...prev, ...result.uploaded]);
+      setBatchUploadProgress(0);
+
+      if (result.errors.length > 0) {
+        showToast(`${result.success_count} files uploaded, ${result.error_count} failed`, 'info');
+      } else {
+        showToast(`${result.success_count} files uploaded successfully!`, 'success');
+      }
+    } catch (error) {
+      console.error('Batch upload failed:', error);
+      showToast('File upload failed', 'error');
+      setBatchUploadProgress(0);
+    }
+  };
+
+  const removeBatchAttachment = (index: number) => {
+    setBatchAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleVideoInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      await processVideo(e.target.files[0]);
+    }
+    e.target.value = '';
   };
 
   const handleImageInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -338,9 +491,11 @@ ${after}`;
     }
 
     try {
-      setUploadProgress(15);
-      const updated = await resourceService.uploadFile(resourceId, resourceFile);
+      const updated = await resourceService.uploadFile(resourceId, resourceFile, (progress) => {
+        setUploadProgress(progress);
+      });
       setUploadProgress(100);
+      showToast('✅ 附件上传成功!', 'success');
       setResourceFile(null);
       setResourceFileName('');
       setTimeout(() => setUploadProgress(0), 800);
@@ -348,7 +503,7 @@ ${after}`;
     } catch (error) {
       console.error('Failed to upload resource file', error);
       setUploadProgress(0);
-      alert('Failed to upload resource file. Please try again.');
+      showToast('❌ 附件上传失败', 'error');
       throw error;
     }
   };
@@ -386,8 +541,8 @@ ${after}`;
       };
 
       let savedResource: Resource;
-      if (isEditing && resourceNumericId) {
-        savedResource = await resourceService.updateResource(resourceNumericId, payload);
+      if (isEditing && resourceId) {
+        savedResource = await resourceService.updateResource(resourceId, payload);  // Use resourceId (string UUID)
       } else {
         savedResource = await resourceService.createResource(payload);
       }
@@ -413,11 +568,8 @@ ${after}`;
     }
   };
 
-  // Sync scroll when content updates to ensure heights are correct for calculation
-  useEffect(() => {
-    const timer = setTimeout(handleScroll, 50);
-    return () => clearTimeout(timer);
-  }, [content, showPreview]);
+  // Removed automatic scroll sync to prevent flicker and scroll lock
+  // Users can scroll independently in editor and preview
 
   useEffect(() => {
     const loadCategories = async () => {
@@ -436,14 +588,14 @@ ${after}`;
   }, []);
 
   useEffect(() => {
-    if (!isEditing || !resourceNumericId) {
+    if (!isEditing || !resourceId) {
       return;
     }
 
     const loadResource = async () => {
       try {
         setIsResourceLoading(true);
-        const data = await resourceService.getResource(resourceNumericId);
+        const data = await resourceService.getResource(resourceId);  // Use resourceId (string UUID) directly
         setCurrentResource(data);
         setTitle(data.title);
         setContent(data.content || data.description || '');
@@ -464,7 +616,7 @@ ${after}`;
     };
 
     loadResource();
-  }, [isEditing, resourceNumericId, navigate]);
+  }, [isEditing, resourceId, navigate]);  // Changed dependency from resourceNumericId to resourceId
 
   if (isEditing && isResourceLoading) {
     return (
@@ -476,8 +628,19 @@ ${after}`;
 
   return (
     <div className="h-screen flex flex-col bg-slate-50">
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed top-20 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-xl shadow-2xl z-[100] animate-fade-in ${toast.type === 'success' ? 'bg-green-500 text-white' :
+          toast.type === 'error' ? 'bg-red-500 text-white' :
+            'bg-blue-500 text-white'
+          }`}>
+          <p className="font-medium text-sm">{toast.message}</p>
+        </div>
+      )}
+
       {/* Hidden Inputs */}
       <input type="file" ref={imageInputRef} onChange={handleImageInput} accept="image/*" className="hidden" />
+      <input type="file" ref={videoInputRef} onChange={handleVideoInput} accept="video/*" className="hidden" />
       <input type="file" ref={coverInputRef} onChange={handleCoverUpload} accept="image/*" className="hidden" />
 
       {/* Top Bar */}
@@ -546,6 +709,7 @@ ${after}`;
             <div className="w-px h-4 bg-slate-200 mx-1"></div>
             <ToolbarButton icon={<LinkIcon size={18} />} onClick={() => insertMarkdown('link')} label={t('editor.link')} />
             <ToolbarButton icon={<ImageIcon size={18} />} onClick={() => imageInputRef.current?.click()} label="Insert Image" />
+            <ToolbarButton icon={<Video size={18} />} onClick={() => videoInputRef.current?.click()} label="Insert Video" />
 
             <div className="ml-auto flex items-center gap-2">
               <button onClick={() => setShowPreview(!showPreview)} className="p-2 text-slate-500 hover:bg-slate-100 rounded" title={showPreview ? t('editor.hidePreview') : t('editor.showPreview')}>
@@ -589,7 +753,17 @@ ${after}`;
                 </span>
               </label>
               {resourceFileName && <span className="text-xs text-slate-500">{resourceFileName}</span>}
-              {uploadProgress > 0 && <span className="text-xs text-green-600 font-medium">{uploadProgress}% {t('editor.uploading')}</span>}
+              {uploadProgress > 0 && (
+                <div className="flex items-center gap-2">
+                  <div className="w-32 h-2 bg-slate-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-green-500 transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                  <span className="text-xs text-green-600 font-medium">{uploadProgress}%</span>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-4">
@@ -626,7 +800,7 @@ ${after}`;
             >
               <article className="prose prose-slate prose-lg max-w-none prose-headings:font-bold prose-a:text-indigo-600 prose-img:rounded-xl prose-img:shadow-lg prose-img:border prose-img:border-slate-100">
                 <h1 className="mb-4 text-4xl tracking-tight text-slate-900">{title || "Untitled Article"}</h1>
-                <div dangerouslySetInnerHTML={{ __html: marked.parse(content) as string }} />
+                <div dangerouslySetInnerHTML={{ __html: previewHtml as string }} />
               </article>
             </div>
           </div>
@@ -725,9 +899,65 @@ ${after}`;
                       type="text"
                       value={tags}
                       onChange={(e) => setTags(e.target.value)}
-                      placeholder="System Design, Backend, ..."
+                      placeholder={t('editor.tagsPlaceholder')}
                       className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"
                     />
+                  </div>
+
+                  {/* Batch Attachments */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-medium text-slate-700">Attachments</label>
+                      <button
+                        onClick={() => batchFileInputRef.current?.click()}
+                        className="text-xs flex items-center gap-1 text-indigo-600 hover:text-indigo-700 font-medium"
+                      >
+                        <Upload size={12} />
+                        Add Files
+                      </button>
+                      <input
+                        ref={batchFileInputRef}
+                        type="file"
+                        multiple
+                        onChange={handleBatchFileUpload}
+                        className="hidden"
+                      />
+                    </div>
+
+                    {/* Progress Bar */}
+                    {batchUploadProgress > 0 && (
+                      <div className="w-full bg-slate-100 rounded-full h-1.5 mb-3 overflow-hidden">
+                        <div
+                          className="bg-indigo-500 h-1.5 rounded-full transition-all duration-300"
+                          style={{ width: `${batchUploadProgress}%` }}
+                        />
+                      </div>
+                    )}
+
+                    {/* File List */}
+                    {batchAttachments.length > 0 ? (
+                      <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
+                        {batchAttachments.map((file, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-100 text-xs">
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              <FileText size={12} className="text-slate-400 flex-shrink-0" />
+                              <span className="truncate text-slate-600" title={file.filename}>{file.filename}</span>
+                              <span className="text-slate-400 text-[10px]">({file.size_formatted})</span>
+                            </div>
+                            <button
+                              onClick={() => removeBatchAttachment(idx)}
+                              className="text-slate-400 hover:text-red-500 transition-colors"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-slate-400 italic p-2 bg-slate-50 rounded border border-slate-100 border-dashed text-center">
+                        No attachments
+                      </div>
+                    )}
                   </div>
 
                   {/* Price Confirmation */}
@@ -753,20 +983,39 @@ ${after}`;
             </div>
 
             {/* Modal Footer */}
-            <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-              <button
-                onClick={() => setShowPublishModal(false)}
-                className="px-5 py-2.5 rounded-xl text-slate-600 font-medium hover:bg-slate-100 transition-colors"
-              >
-                {t('editor.cancel')}
-              </button>
-              <button
-                onClick={handleFinalPublish}
-                disabled={isPublishing}
-                className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-colors disabled:opacity-70"
-              >
-                {isPublishing ? 'Saving…' : isEditing ? 'Save Changes' : t('editor.confirmPublish')}
-              </button>
+            <div className="p-6 border-t border-slate-100 bg-slate-50 flex flex-col gap-4">
+              {/* Upload Progress Bar */}
+              {uploadProgress > 0 && (
+                <div className="w-full">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-slate-500">{t('editor.uploadingAttachment')}...</span>
+                    <span className="text-indigo-600 font-medium">{uploadProgress}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-indigo-500 transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowPublishModal(false)}
+                  className="px-5 py-2.5 rounded-xl text-slate-600 font-medium hover:bg-slate-100 transition-colors"
+                >
+                  {t('editor.cancel')}
+                </button>
+                <button
+                  onClick={handleFinalPublish}
+                  disabled={isPublishing}
+                  className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-colors disabled:opacity-70 flex items-center gap-2"
+                >
+                  {isPublishing && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                  {isPublishing ? 'Saving…' : isEditing ? 'Save Changes' : t('editor.confirmPublish')}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -777,7 +1026,7 @@ ${after}`;
           image={cropImageSrc}
           onCropComplete={handleCropComplete}
           onCancel={() => setCropImageSrc(null)}
-          aspect={16 / 9}
+          aspectRatio={16 / 10}
         />
       )}
     </div>

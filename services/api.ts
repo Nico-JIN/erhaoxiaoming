@@ -1,12 +1,31 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 
-// API Base URL
-export const API_BASE_URL = (import.meta.env.VITE_API_URL as string) || 'http://localhost:8000';
+// Function to get the correct API base URL based on current hostname
+function getApiBaseUrl(): string {
+  // Check if running in browser
+  if (typeof window === 'undefined') {
+    return 'http://localhost:8000';
+  }
 
-// 调试日志
-console.log('🔧 API配置:', {
+  const hostname = window.location.hostname;
+
+  // Production domain
+  if (hostname === 'ai.dxin.store') {
+    console.log('🌐 Production mode: Using https://api.dxin.store');
+    return 'https://api.dxin.store';
+  }
+
+  // Development/localhost
+  console.log('🔧 Development mode: Using http://localhost:8000');
+  return import.meta.env.VITE_API_URL || 'http://localhost:8000';
+}
+
+export const API_BASE_URL = getApiBaseUrl();
+
+console.log('API配置:', {
+  hostname: typeof window !== 'undefined' ? window.location.hostname : 'server',
   VITE_API_URL: import.meta.env.VITE_API_URL,
-  API_BASE_URL: API_BASE_URL,
+  API_BASE_URL,
   mode: import.meta.env.MODE
 });
 
@@ -46,7 +65,11 @@ api.interceptors.response.use(
       // Token expired or invalid
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');
-      window.location.href = '/login';
+
+      // Trigger auth modal instead of redirecting to non-existent /login page
+      window.dispatchEvent(new Event('open-auth-modal'));
+
+      console.log('🔐 Token expired - opening auth modal');
     }
     return Promise.reject(error);
   }

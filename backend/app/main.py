@@ -46,6 +46,10 @@ app.add_middleware(
 app.add_middleware(RateLimitMiddleware, requests_per_minute=100, requests_per_second=10)
 app.add_middleware(IPBlocklistMiddleware)
 
+# Add analytics tracking
+from backend.app.middleware import AnalyticsMiddleware
+app.add_middleware(AnalyticsMiddleware)
+
 register_routers(app)
 
 

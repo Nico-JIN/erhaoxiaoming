@@ -1,8 +1,8 @@
-"""Router registry."""
+"""API router registration."""
 
 from fastapi import FastAPI
 
-from . import admin, auth, categories, insights, interactions, payment, points, recharge, resources, uploads, users
+from . import admin, auth, categories, insights, interactions, payment, points, recharge, resources, uploads, users, search
 
 
 ALL_ROUTERS = [
@@ -17,11 +17,10 @@ ALL_ROUTERS = [
     payment.router,
     recharge.router,
     interactions.router,
+    search.router,
 ]
 
 
 def register_routers(app: FastAPI) -> None:
-    """Include all routers on the given FastAPI app."""
-
     for router in ALL_ROUTERS:
         app.include_router(router)

@@ -82,7 +82,7 @@ async def get_balance(current_user: User = Depends(get_current_user)):
 
 @router.post("/admin/adjust", response_model=PointTransactionResponse)
 async def admin_adjust_points(
-    user_id: int,
+    user_id: str,
     transaction_data: PointTransactionCreate,
     request: Request,
     current_admin: User = Depends(get_current_admin),

@@ -156,6 +156,7 @@ class Resource(Base):
     author = relationship("User", back_populates="resources")
     likes = relationship("ResourceLike", back_populates="resource", cascade="all, delete-orphan")
     comments = relationship("Comment", back_populates="resource", cascade="all, delete-orphan")
+    attachments = relationship("ResourceAttachment", back_populates="resource", cascade="all, delete-orphan")
 
     @property
     def category_name(self):
@@ -331,3 +332,78 @@ class Comment(Base):
     user = relationship("User")
     resource = relationship("Resource", back_populates="comments")
     replies = relationship("Comment", backref="parent", remote_side=[id])
+
+
+class ActionType(str, enum.Enum):
+    """User action types for activity logging."""
+    PAGE_VIEW = "PAGE_VIEW"
+    ARTICLE_VIEW = "ARTICLE_VIEW"
+    DOWNLOAD = "DOWNLOAD"
+    SEARCH = "SEARCH"
+    LOGIN = "LOGIN"
+    LOGOUT = "LOGOUT"
+    REGISTER = "REGISTER"
+    LIKE = "LIKE"
+    COMMENT = "COMMENT"
+    PURCHASE = "PURCHASE"
+    UPLOAD = "UPLOAD"
+
+
+class VisitorAnalytics(Base):
+    """Track all page visits for analytics."""
+    __tablename__ = "visitor_analytics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(String(64), index=True)  # Unique session identifier
+    ip_address = Column(String(50))
+    user_agent = Column(String(500))
+    user_id = Column(CHAR(32), ForeignKey("users.id"), nullable=True, index=True)
+    
+    page_path = Column(String(500))  # e.g., /article/123
+    referrer = Column(String(500), nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    user = relationship("User")
+
+
+class ActivityLog(Base):
+    """Detailed user activity logging for user profiling."""
+    __tablename__ = "activity_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(CHAR(32), ForeignKey("users.id"), nullable=True, index=True)
+    session_id = Column(String(64), index=True)
+    
+    action_type = Column(Enum(ActionType), index=True)
+    resource_id = Column(CHAR(32), ForeignKey("resources.id"), nullable=True, index=True)
+    
+    # JSON action_metadata: search query, button clicked, etc.
+    action_metadata = Column(Text, nullable=True)
+    
+    ip_address = Column(String(50))
+    user_agent = Column(String(500))
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    user = relationship("User")
+    resource = relationship("Resource")
+
+
+class ResourceAttachment(Base):
+    """Multiple file attachments for a single resource."""
+    __tablename__ = "resource_attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    resource_id = Column(CHAR(32), ForeignKey("resources.id", ondelete="CASCADE"), index=True)
+    
+    file_name = Column(String(255))
+    file_url = Column(String(500))
+    file_size = Column(String(50), nullable=True)  # e.g., "2.5 MB"
+    file_type = Column(String(100), nullable=True)  # MIME type
+    
+    download_count = Column(Integer, default=0)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    resource = relationship("Resource", back_populates="attachments")

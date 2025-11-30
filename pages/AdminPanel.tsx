@@ -14,6 +14,8 @@ import {
   CreditCard,
   Upload,
   Smartphone,
+  LogOut,
+  BarChart,
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useNavigate } from 'react-router-dom';
@@ -27,7 +29,7 @@ import ImageCropper from '../components/ImageCropper';
 import NotificationSound from '../components/NotificationSound';
 import rechargeService, { RechargePlan, RechargeOrder } from '../services/rechargeService';
 
-type AdminTab = 'dashboard' | 'users' | 'content' | 'finance' | 'categories' | 'payment' | 'logs';
+type AdminTab = 'dashboard' | 'users' | 'content' | 'finance' | 'categories' | 'payment' | 'logs' | 'analytics';
 
 const AdminPanel: React.FC = () => {
   const { t } = useLanguage();
@@ -40,6 +42,7 @@ const AdminPanel: React.FC = () => {
     categories: t('admin.tabTitles.categories'),
     payment: t('admin.payment'),
     logs: t('admin.tabTitles.logs'),
+    analytics: 'Analytics',
   };
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -48,6 +51,11 @@ const AdminPanel: React.FC = () => {
   const [transactions, setTransactions] = useState<PointTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
+
+  // Sorting State
+  const [sortField, setSortField] = useState<string>('created_at');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+
   const [categories, setCategories] = useState<Category[]>([]);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [categoryFormLoading, setCategoryFormLoading] = useState(false);
@@ -194,7 +202,7 @@ const AdminPanel: React.FC = () => {
       alert('请至少选择一个用户');
       return;
     }
-    
+
     if (!confirm(`确定要删除选中的 ${selectedUsers.length} 个用户吗？此操作不可恢复！`)) {
       return;
     }
@@ -231,7 +239,7 @@ const AdminPanel: React.FC = () => {
       alert('请至少选择一篇文章');
       return;
     }
-    
+
     if (!confirm(`确定要删除选中的 ${selectedResources.length} 篇文章吗？此操作不可恢复！`)) {
       return;
     }
@@ -415,7 +423,7 @@ const AdminPanel: React.FC = () => {
       const file = new File([croppedBlob], `qrcode-${cropperMethod}.jpg`, { type: 'image/jpeg' });
       const uploaded = await uploadService.uploadImage(file);
       const imageUrl = uploaded.resolvedUrl || uploadService.getPublicUrl(uploaded.object_name);
-      
+
       if (!imageUrl) {
         throw new Error('Image upload failed');
       }
@@ -451,7 +459,7 @@ const AdminPanel: React.FC = () => {
       setUploadingQR(method);
       const uploaded = await uploadService.uploadImage(file);
       const imageUrl = uploaded.resolvedUrl || uploadService.getPublicUrl(uploaded.object_name);
-      
+
       if (!imageUrl) {
         throw new Error('Image upload failed');
       }
@@ -526,7 +534,7 @@ const AdminPanel: React.FC = () => {
         ...planForm,
         price: Math.round(planForm.price * 100),
       };
-      
+
       if (editingPlan) {
         await rechargeService.updatePlan(editingPlan.id, planData);
         setMessage('充值套餐更新成功');
@@ -588,9 +596,9 @@ const AdminPanel: React.FC = () => {
       const file = new File([croppedBlob], `plan-qrcode-${currentCropType}.jpg`, { type: 'image/jpeg' });
       const uploaded = await uploadService.uploadImage(file);
       const imageUrl = uploaded.resolvedUrl || uploadService.getPublicUrl(uploaded.object_name);
-      
+
       console.log('🟢 图片上传成功, URL:', imageUrl);
-      
+
       if (!imageUrl) {
         throw new Error('Image upload failed');
       }
@@ -632,11 +640,11 @@ const AdminPanel: React.FC = () => {
   const handleApproveOrder = async (orderId: number) => {
     const order = rechargeOrders.find(o => o.id === orderId);
     if (!order) return;
-    
+
     try {
       await rechargeService.updateOrderStatus(orderId, { status: 'APPROVED' });
       await refreshOrders();
-      
+
       // 显示批准成功通知
       setNotificationConfig({
         title: '订单已批准',
@@ -669,9 +677,9 @@ const AdminPanel: React.FC = () => {
   const handleRejectOrder = async (orderId: number) => {
     const note = prompt('请输入拒绝原因:');
     if (!note) return;
-    
+
     try {
-      await rechargeService.updateOrderStatus(orderId, { 
+      await rechargeService.updateOrderStatus(orderId, {
         status: 'REJECTED',
         admin_note: note,
       });
@@ -686,11 +694,12 @@ const AdminPanel: React.FC = () => {
   const SidebarItem = ({ id, icon: Icon, label }: { id: AdminTab; icon: any; label: string }) => (
     <button
       onClick={() => setActiveTab(id)}
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-        activeTab === id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
-      }`}
+      className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === id
+        ? 'bg-indigo-50 text-indigo-600'
+        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+        }`}
     >
-      <Icon size={18} />
+      <Icon size={18} className={activeTab === id ? 'text-indigo-600' : 'text-slate-400'} />
       {label}
     </button>
   );
@@ -767,78 +776,121 @@ const AdminPanel: React.FC = () => {
           <button onClick={refreshUsers} className="text-sm text-indigo-600 hover:underline">{t('admin.refresh')}</button>
         </div>
       </div>
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        <table className="w-full text-sm text-left">
-          <thead className="bg-slate-50 text-slate-500 font-medium">
-            <tr>
-              <th className="px-6 py-3 w-12">
-                <input
-                  type="checkbox"
-                  checked={users.length > 0 && selectedUsers.length === users.length}
-                  onChange={handleToggleAllUsers}
-                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                />
-              </th>
-              <th className="px-6 py-3">{t('admin.usersTable.user')}</th>
-              <th className="px-6 py-3">{t('admin.usersTable.role')}</th>
-              <th className="px-6 py-3">{t('admin.usersTable.points')}</th>
-              <th className="px-6 py-3">{t('admin.usersTable.status')}</th>
-              <th className="px-6 py-3 text-right">{t('admin.usersTable.actions')}</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {users.map((u) => (
-              <tr key={u.id} className="hover:bg-slate-50">
-                <td className="px-6 py-4">
-                  <input
-                    type="checkbox"
-                    checked={selectedUsers.includes(u.id)}
-                    onChange={() => handleToggleUserSelection(u.id)}
-                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex flex-col">
-                    <span className="font-semibold text-slate-900">{u.full_name || u.username}</span>
-                    <span className="text-xs text-slate-500">{u.email || t('admin.usersTable.emailFallback')}</span>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <select
-                    value={u.role}
-                    onChange={(event) => handleRoleChange(u.id, event.target.value as UserManagement['role'])}
-                    className="border border-slate-200 rounded-lg px-2 py-1 text-sm"
+
+      {/* Sorting Logic */}
+      {(() => {
+        const handleSort = (field: string) => {
+          if (sortField === field) {
+            setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+          } else {
+            setSortField(field);
+            setSortDirection('desc');
+          }
+        };
+
+        const sortedUsers = [...users].sort((a: any, b: any) => {
+          const aVal = a[sortField];
+          const bVal = b[sortField];
+          if (aVal === bVal) return 0;
+          const modifier = sortDirection === 'asc' ? 1 : -1;
+          return aVal > bVal ? modifier : -modifier;
+        });
+
+        return (
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-slate-50 text-slate-500 font-medium">
+                <tr>
+                  <th className="px-6 py-3 w-12">
+                    <input
+                      type="checkbox"
+                      checked={users.length > 0 && selectedUsers.length === users.length}
+                      onChange={handleToggleAllUsers}
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                  </th>
+                  <th
+                    className="px-6 py-3 cursor-pointer hover:text-indigo-600 transition-colors"
+                    onClick={() => handleSort('username')}
                   >
-                    <option value="USER">{t('admin.roleUser')}</option>
-                    <option value="VIP">{t('admin.roleVip')}</option>
-                    <option value="ADMIN">{t('admin.roleAdmin')}</option>
-                  </select>
-                </td>
-                <td className="px-6 py-4 font-bold text-indigo-600">{u.points}</td>
-                <td className="px-6 py-4">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${u.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                    {u.is_active ? t('admin.usersTable.active') : t('admin.usersTable.banned')}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-right space-x-2">
-                  <button
-                    onClick={() => handleToggleStatus(u.id, !u.is_active)}
-                    className="text-xs px-3 py-1 rounded-lg border border-slate-200 hover:bg-slate-100"
+                    {t('admin.usersTable.user')} {sortField === 'username' && (sortDirection === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th
+                    className="px-6 py-3 cursor-pointer hover:text-indigo-600 transition-colors"
+                    onClick={() => handleSort('role')}
                   >
-                    {u.is_active ? t('admin.usersTable.disable') : t('admin.usersTable.enable')}
-                  </button>
-                  <button
-                    onClick={() => handleAdjustPoints(u)}
-                    className="text-xs px-3 py-1 rounded-lg border border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+                    {t('admin.usersTable.role')} {sortField === 'role' && (sortDirection === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th
+                    className="px-6 py-3 cursor-pointer hover:text-indigo-600 transition-colors"
+                    onClick={() => handleSort('points')}
                   >
-                    {t('admin.usersTable.adjust')}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                    {t('admin.usersTable.points')} {sortField === 'points' && (sortDirection === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th
+                    className="px-6 py-3 cursor-pointer hover:text-indigo-600 transition-colors"
+                    onClick={() => handleSort('is_active')}
+                  >
+                    {t('admin.usersTable.status')} {sortField === 'is_active' && (sortDirection === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th className="px-6 py-3 text-right">{t('admin.usersTable.actions')}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {sortedUsers.map((u) => (
+                  <tr key={u.id} className="hover:bg-slate-50">
+                    <td className="px-6 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedUsers.includes(u.id)}
+                        onChange={() => handleToggleUserSelection(u.id)}
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-slate-900">{u.full_name || u.username}</span>
+                        <span className="text-xs text-slate-500">{u.email || t('admin.usersTable.emailFallback')}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <select
+                        value={u.role}
+                        onChange={(event) => handleRoleChange(u.id, event.target.value as UserManagement['role'])}
+                        className="border border-slate-200 rounded-lg px-2 py-1 text-sm"
+                      >
+                        <option value="USER">{t('admin.roleUser')}</option>
+                        <option value="VIP">{t('admin.roleVip')}</option>
+                        <option value="ADMIN">{t('admin.roleAdmin')}</option>
+                      </select>
+                    </td>
+                    <td className="px-6 py-4 font-bold text-indigo-600">{u.points}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${u.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {u.is_active ? t('admin.usersTable.active') : t('admin.usersTable.banned')}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right space-x-2">
+                      <button
+                        onClick={() => handleToggleStatus(u.id, !u.is_active)}
+                        className="text-xs px-3 py-1 rounded-lg border border-slate-200 hover:bg-slate-100"
+                      >
+                        {u.is_active ? t('admin.usersTable.disable') : t('admin.usersTable.enable')}
+                      </button>
+                      <button
+                        onClick={() => handleAdjustPoints(u)}
+                        className="text-xs px-3 py-1 rounded-lg border border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+                      >
+                        {t('admin.usersTable.adjust')}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
     </div>
   );
 
@@ -1147,7 +1199,7 @@ const AdminPanel: React.FC = () => {
               ))}
             </tbody>
           </table>
-        )}  
+        )}
       </div>
     </div>
   );
@@ -1188,15 +1240,14 @@ const AdminPanel: React.FC = () => {
                     <td className="px-6 py-3 text-slate-600">￥{(order.amount / 100).toFixed(2)}</td>
                     <td className="px-6 py-3 text-slate-500">{order.payment_method === 'wechat' ? '微信' : '支付宝'}</td>
                     <td className="px-6 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        order.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${order.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
                         order.status === 'APPROVED' || order.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
-                        'bg-red-100 text-red-700'
-                      }`}>
+                          'bg-red-100 text-red-700'
+                        }`}>
                         {order.status === 'PENDING' ? '待审核' :
-                         order.status === 'APPROVED' ? '已批准' :
-                         order.status === 'COMPLETED' ? '已完成' :
-                         '已拒绝'}
+                          order.status === 'APPROVED' ? '已批准' :
+                            order.status === 'COMPLETED' ? '已完成' :
+                              '已拒绝'}
                       </span>
                     </td>
                     <td className="px-6 py-3 text-slate-500 text-xs">{new Date(order.created_at).toLocaleString()}</td>
@@ -1239,91 +1290,112 @@ const AdminPanel: React.FC = () => {
           </button>
         </div>
         <div className="grid md:grid-cols-3 gap-6">
-        {rechargePlans.map((plan) => (
-          <div key={plan.id} className={`bg-white rounded-2xl border shadow-sm p-6 ${plan.is_featured ? 'border-indigo-300 ring-2 ring-indigo-100' : 'border-slate-100'}`}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-lg text-slate-800">{plan.name}</h3>
-              {plan.is_featured && <span className="text-xs bg-indigo-100 text-indigo-600 px-2 py-1 rounded-full">推荐</span>}
-            </div>
-            <div className="mb-4">
-              <div className="text-3xl font-bold text-indigo-600">￥{(plan.price / 100).toFixed(2)}</div>
-              <div className="text-sm text-slate-500 mt-1">{plan.points} 积分</div>
-            </div>
-            {plan.description && <p className="text-sm text-slate-600 mb-4">{plan.description}</p>}
-            <div className="flex items-center gap-2 text-xs">
-              <span className={`px-2 py-1 rounded-full ${plan.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                {plan.is_active ? '已启用' : '已禁用'}
-              </span>
-              <span className="text-slate-500">顺序: {plan.order}</span>
-            </div>
-            <div className="mt-4 flex gap-2">
-              <button onClick={() => handleEditPlan(plan)} className="flex-1 text-xs px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200">
-                编辑
-              </button>
-              <button onClick={() => handleDeletePlan(plan.id)} className="text-xs px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100">
-                删除
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-      {showPlanForm && !planQRImage && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <h3 className="text-xl font-bold text-slate-800 mb-4">{editingPlan ? '编辑套餐' : '新增套餐'}</h3>
-            <div className="space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">套餐名称</label>
-                  <input type="text" value={planForm.name} onChange={(e) => setPlanForm({...planForm, name: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">类型</label>
-                  <select value={planForm.plan_type} onChange={(e) => setPlanForm({...planForm, plan_type: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg">
-                    <option value="monthly">月度</option>
-                    <option value="quarterly">季度</option>
-                    <option value="yearly">年度</option>
-                  </select>
-                </div>
+          {rechargePlans.map((plan) => (
+            <div key={plan.id} className={`bg-white rounded-2xl border shadow-sm p-6 ${plan.is_featured ? 'border-indigo-300 ring-2 ring-indigo-100' : 'border-slate-100'}`}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-lg text-slate-800">{plan.name}</h3>
+                {plan.is_featured && <span className="text-xs bg-indigo-100 text-indigo-600 px-2 py-1 rounded-full">推荐</span>}
               </div>
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">积分</label>
-                  <input type="number" value={planForm.points} onChange={(e) => setPlanForm({...planForm, points: parseInt(e.target.value) || 0})} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">价格（元）</label>
-                  <input type="number" step="0.01" value={planForm.price} onChange={(e) => setPlanForm({...planForm, price: parseFloat(e.target.value) || 0})} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
-                </div>
+              <div className="mb-4">
+                <div className="text-3xl font-bold text-indigo-600">￥{(plan.price / 100).toFixed(2)}</div>
+                <div className="text-sm text-slate-500 mt-1">{plan.points} 积分</div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">描述</label>
-                <textarea value={planForm.description} onChange={(e) => setPlanForm({...planForm, description: e.target.value})} rows={3} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+              {plan.description && <p className="text-sm text-slate-600 mb-4">{plan.description}</p>}
+              <div className="flex items-center gap-2 text-xs">
+                <span className={`px-2 py-1 rounded-full ${plan.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                  {plan.is_active ? '已启用' : '已禁用'}
+                </span>
+                <span className="text-slate-500">顺序: {plan.order}</span>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">功能列表（JSON）</label>
-                <textarea value={planForm.features} onChange={(e) => setPlanForm({...planForm, features: e.target.value})} rows={3} className="w-full px-3 py-2 border border-slate-300 rounded-lg" placeholder='["feature1", "feature2"]' />
+              <div className="mt-4 flex gap-2">
+                <button onClick={() => handleEditPlan(plan)} className="flex-1 text-xs px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200">
+                  编辑
+                </button>
+                <button onClick={() => handleDeletePlan(plan.id)} className="text-xs px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100">
+                  删除
+                </button>
               </div>
-              
-              {/* 收款码上传 */}
-              <div className="border-t border-slate-200 pt-4">
-                <h4 className="text-sm font-semibold text-slate-700 mb-3">收款码设置</h4>
+            </div>
+          ))}
+        </div>
+        {showPlanForm && !planQRImage && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <h3 className="text-xl font-bold text-slate-800 mb-4">{editingPlan ? '编辑套餐' : '新增套餐'}</h3>
+              <div className="space-y-4">
                 <div className="grid md:grid-cols-2 gap-4">
-                  {/* 微信收款码 */}
-                  <div className="border border-slate-200 rounded-lg p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Smartphone size={18} className="text-green-600" />
-                      <span className="text-sm font-medium text-slate-700">微信收款码</span>
-                    </div>
-                    {planForm.wechat_qr_code ? (
-                      <div className="space-y-2">
-                        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden" style={{ width: '100%', aspectRatio: '1/1' }}>
-                          <img src={planForm.wechat_qr_code} alt="WeChat QR" className="w-full h-full object-contain" />
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">套餐名称</label>
+                    <input type="text" value={planForm.name} onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">类型</label>
+                    <select value={planForm.plan_type} onChange={(e) => setPlanForm({ ...planForm, plan_type: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                      <option value="monthly">月度</option>
+                      <option value="quarterly">季度</option>
+                      <option value="yearly">年度</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">积分</label>
+                    <input type="number" value={planForm.points} onChange={(e) => setPlanForm({ ...planForm, points: parseInt(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">价格（元）</label>
+                    <input type="number" step="0.01" value={planForm.price} onChange={(e) => setPlanForm({ ...planForm, price: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">描述</label>
+                  <textarea value={planForm.description} onChange={(e) => setPlanForm({ ...planForm, description: e.target.value })} rows={3} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">功能列表（JSON）</label>
+                  <textarea value={planForm.features} onChange={(e) => setPlanForm({ ...planForm, features: e.target.value })} rows={3} className="w-full px-3 py-2 border border-slate-300 rounded-lg" placeholder='["feature1", "feature2"]' />
+                </div>
+
+                {/* 收款码上传 */}
+                <div className="border-t border-slate-200 pt-4">
+                  <h4 className="text-sm font-semibold text-slate-700 mb-3">收款码设置</h4>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {/* 微信收款码 */}
+                    <div className="border border-slate-200 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Smartphone size={18} className="text-green-600" />
+                        <span className="text-sm font-medium text-slate-700">微信收款码</span>
+                      </div>
+                      {planForm.wechat_qr_code ? (
+                        <div className="space-y-2">
+                          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden" style={{ width: '100%', aspectRatio: '1/1' }}>
+                            <img src={planForm.wechat_qr_code} alt="WeChat QR" className="w-full h-full object-contain" />
+                          </div>
+                          <label className="block">
+                            <span className="cursor-pointer text-xs text-green-600 hover:underline">
+                              {uploadingPlanQR === 'wechat' ? '上传中...' : '重新上传'}
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => e.target.files?.[0] && handleSelectPlanQRImage('wechat', e.target.files[0])}
+                              disabled={uploadingPlanQR === 'wechat'}
+                            />
+                          </label>
                         </div>
+                      ) : (
                         <label className="block">
-                          <span className="cursor-pointer text-xs text-green-600 hover:underline">
-                            {uploadingPlanQR === 'wechat' ? '上传中...' : '重新上传'}
-                          </span>
+                          <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center cursor-pointer hover:border-green-500 hover:bg-green-50 transition-colors">
+                            {uploadingPlanQR === 'wechat' ? (
+                              <div className="text-xs text-green-600">上传中...</div>
+                            ) : (
+                              <>
+                                <Upload size={24} className="mx-auto mb-2 text-slate-400" />
+                                <div className="text-xs text-slate-500">点击上传</div>
+                              </>
+                            )}
+                          </div>
                           <input
                             type="file"
                             accept="image/*"
@@ -1332,45 +1404,45 @@ const AdminPanel: React.FC = () => {
                             disabled={uploadingPlanQR === 'wechat'}
                           />
                         </label>
-                      </div>
-                    ) : (
-                      <label className="block">
-                        <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center cursor-pointer hover:border-green-500 hover:bg-green-50 transition-colors">
-                          {uploadingPlanQR === 'wechat' ? (
-                            <div className="text-xs text-green-600">上传中...</div>
-                          ) : (
-                            <>
-                              <Upload size={24} className="mx-auto mb-2 text-slate-400" />
-                              <div className="text-xs text-slate-500">点击上传</div>
-                            </>
-                          )}
-                        </div>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => e.target.files?.[0] && handleSelectPlanQRImage('wechat', e.target.files[0])}
-                          disabled={uploadingPlanQR === 'wechat'}
-                        />
-                      </label>
-                    )}
-                  </div>
-                  
-                  {/* 支付宝收款码 */}
-                  <div className="border border-slate-200 rounded-lg p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <CreditCard size={18} className="text-blue-600" />
-                      <span className="text-sm font-medium text-slate-700">支付宝收款码</span>
+                      )}
                     </div>
-                    {planForm.alipay_qr_code ? (
-                      <div className="space-y-2">
-                        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden" style={{ width: '100%', aspectRatio: '1/1' }}>
-                          <img src={planForm.alipay_qr_code} alt="Alipay QR" className="w-full h-full object-contain" />
+
+                    {/* 支付宝收款码 */}
+                    <div className="border border-slate-200 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <CreditCard size={18} className="text-blue-600" />
+                        <span className="text-sm font-medium text-slate-700">支付宝收款码</span>
+                      </div>
+                      {planForm.alipay_qr_code ? (
+                        <div className="space-y-2">
+                          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden" style={{ width: '100%', aspectRatio: '1/1' }}>
+                            <img src={planForm.alipay_qr_code} alt="Alipay QR" className="w-full h-full object-contain" />
+                          </div>
+                          <label className="block">
+                            <span className="cursor-pointer text-xs text-blue-600 hover:underline">
+                              {uploadingPlanQR === 'alipay' ? '上传中...' : '重新上传'}
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => e.target.files?.[0] && handleSelectPlanQRImage('alipay', e.target.files[0])}
+                              disabled={uploadingPlanQR === 'alipay'}
+                            />
+                          </label>
                         </div>
+                      ) : (
                         <label className="block">
-                          <span className="cursor-pointer text-xs text-blue-600 hover:underline">
-                            {uploadingPlanQR === 'alipay' ? '上传中...' : '重新上传'}
-                          </span>
+                          <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-colors">
+                            {uploadingPlanQR === 'alipay' ? (
+                              <div className="text-xs text-blue-600">上传中...</div>
+                            ) : (
+                              <>
+                                <Upload size={24} className="mx-auto mb-2 text-slate-400" />
+                                <div className="text-xs text-slate-500">点击上传</div>
+                              </>
+                            )}
+                          </div>
                           <input
                             type="file"
                             accept="image/*"
@@ -1379,62 +1451,41 @@ const AdminPanel: React.FC = () => {
                             disabled={uploadingPlanQR === 'alipay'}
                           />
                         </label>
-                      </div>
-                    ) : (
-                      <label className="block">
-                        <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-colors">
-                          {uploadingPlanQR === 'alipay' ? (
-                            <div className="text-xs text-blue-600">上传中...</div>
-                          ) : (
-                            <>
-                              <Upload size={24} className="mx-auto mb-2 text-slate-400" />
-                              <div className="text-xs text-slate-500">点击上传</div>
-                            </>
-                          )}
-                        </div>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => e.target.files?.[0] && handleSelectPlanQRImage('alipay', e.target.files[0])}
-                          disabled={uploadingPlanQR === 'alipay'}
-                        />
-                      </label>
-                    )}
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2">• 每个套餐可以设置不同的收款码，用户购买时将显示对应的二维码</p>
+                </div>
+                <div className="grid md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={planForm.is_active} onChange={(e) => setPlanForm({ ...planForm, is_active: e.target.checked })} className="w-4 h-4" />
+                      <span className="text-sm text-slate-700">启用</span>
+                    </label>
+                  </div>
+                  <div>
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={planForm.is_featured} onChange={(e) => setPlanForm({ ...planForm, is_featured: e.target.checked })} className="w-4 h-4" />
+                      <span className="text-sm text-slate-700">推荐</span>
+                    </label>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">排序</label>
+                    <input type="number" value={planForm.order} onChange={(e) => setPlanForm({ ...planForm, order: parseInt(e.target.value) || 0 })} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
                   </div>
                 </div>
-                <p className="text-xs text-slate-500 mt-2">• 每个套餐可以设置不同的收款码，用户购买时将显示对应的二维码</p>
               </div>
-              <div className="grid md:grid-cols-3 gap-4">
-                <div>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={planForm.is_active} onChange={(e) => setPlanForm({...planForm, is_active: e.target.checked})} className="w-4 h-4" />
-                    <span className="text-sm text-slate-700">启用</span>
-                  </label>
-                </div>
-                <div>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={planForm.is_featured} onChange={(e) => setPlanForm({...planForm, is_featured: e.target.checked})} className="w-4 h-4" />
-                    <span className="text-sm text-slate-700">推荐</span>
-                  </label>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">排序</label>
-                  <input type="number" value={planForm.order} onChange={(e) => setPlanForm({...planForm, order: parseInt(e.target.value) || 0})} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
-                </div>
+              <div className="flex gap-2 mt-6">
+                <button onClick={() => setShowPlanForm(false)} className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50">
+                  取消
+                </button>
+                <button onClick={handleSavePlan} className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                  {editingPlan ? '保存' : '创建'}
+                </button>
               </div>
-            </div>
-            <div className="flex gap-2 mt-6">
-              <button onClick={() => setShowPlanForm(false)} className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50">
-                取消
-              </button>
-              <button onClick={handleSavePlan} className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
-                {editingPlan ? '保存' : '创建'}
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
       </div>
     </div>
   );
@@ -1453,6 +1504,46 @@ const AdminPanel: React.FC = () => {
         return renderFinanceTab();
       case 'logs':
         return renderLogs();
+      case 'analytics':
+        return (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <h3 className="text-slate-500 text-sm font-medium mb-2">Total Visits</h3>
+                <p className="text-3xl font-bold text-slate-900">1,234</p>
+                <div className="mt-2 text-xs text-emerald-600 flex items-center">
+                  <ArrowUpRight size={12} className="mr-1" />
+                  +12.5% from last month
+                </div>
+              </div>
+              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <h3 className="text-slate-500 text-sm font-medium mb-2">Unique Visitors</h3>
+                <p className="text-3xl font-bold text-slate-900">856</p>
+                <div className="mt-2 text-xs text-emerald-600 flex items-center">
+                  <ArrowUpRight size={12} className="mr-1" />
+                  +8.2% from last month
+                </div>
+              </div>
+              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <h3 className="text-slate-500 text-sm font-medium mb-2">Avg. Session Duration</h3>
+                <p className="text-3xl font-bold text-slate-900">4m 12s</p>
+                <div className="mt-2 text-xs text-slate-400 flex items-center">
+                  <Activity size={12} className="mr-1" />
+                  Stable
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="p-6 border-b border-slate-100">
+                <h3 className="font-bold text-slate-800">Recent Activity</h3>
+              </div>
+              <div className="p-6 text-center text-slate-400 text-sm italic">
+                Activity logs will appear here...
+              </div>
+            </div>
+          </div>
+        );
       default:
         return <div className="p-12 text-center text-slate-400">{t('admin.comingSoon')}</div>;
     }
@@ -1476,23 +1567,36 @@ const AdminPanel: React.FC = () => {
           aspectRatio={1}
         />
       )}
+      {/* Sidebar */}
       <div className="w-64 bg-white border-r border-slate-200 flex flex-col">
-        <div className="p-6 flex items-center gap-2 border-b border-slate-100">
-          <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-white font-bold">L</div>
-          <span className="text-lg font-bold text-slate-900">{t('admin.brand')}</span>
+        {/* Logo */}
+        <div className="p-6 flex items-center gap-3">
+          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">
+            L
+          </div>
+          <span className="text-lg font-bold text-slate-900 tracking-tight">{t('admin.brand')}</span>
         </div>
-        <div className="flex-1 p-4 space-y-2 overflow-y-auto">
+
+        {/* Navigation */}
+        <div className="flex-1 px-3 py-4 space-y-1 overflow-y-auto custom-scrollbar">
           <SidebarItem id="dashboard" icon={LayoutDashboard} label={t('admin.dashboard')} />
           <SidebarItem id="users" icon={Users} label={t('admin.users')} />
           <SidebarItem id="content" icon={FileText} label={t('admin.content')} />
           <SidebarItem id="finance" icon={Wallet} label={t('admin.finance')} />
           <SidebarItem id="categories" icon={Layers} label={t('admin.categories')} />
-          <div className="pt-4 mt-4 border-t border-slate-100">
+          <div className="pt-3 mt-3 border-t border-slate-100">
+            <SidebarItem id="analytics" icon={BarChart} label="Analytics" />
             <SidebarItem id="logs" icon={Activity} label={t('admin.logs')} />
           </div>
         </div>
+
+        {/* Logout Button */}
         <div className="p-4 border-t border-slate-100">
-          <button onClick={() => navigate('/')} className="w-full py-2 text-sm text-slate-500 hover:bg-slate-50 rounded-lg transition-colors">
+          <button
+            onClick={() => navigate('/')}
+            className="w-full flex items-center gap-3 px-4 py-2.5 text-slate-500 hover:bg-slate-50 hover:text-red-600 rounded-lg transition-colors text-sm font-medium"
+          >
+            <LogOut size={18} />
             {t('admin.exit')}
           </button>
         </div>
@@ -1523,7 +1627,7 @@ const AdminPanel: React.FC = () => {
           )}
         </main>
       </div>
-      
+
       {/* 通知弹窗 */}
       <NotificationSound
         isOpen={showNotification}

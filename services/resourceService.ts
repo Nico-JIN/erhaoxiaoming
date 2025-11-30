@@ -174,13 +174,19 @@ class ResourceService {
     await api.delete(`/api/resources/${resourceId}`);
   }
 
-  async uploadFile(resourceId: string | number, file: File): Promise<Resource> {
+  async uploadFile(resourceId: string | number, file: File, onProgress?: (progress: number) => void): Promise<Resource> {
     const formData = new FormData();
     formData.append('file', file);
 
     const response = await api.post<ResourceDto>(`/api/resources/${resourceId}/upload`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress: (progressEvent) => {
+        if (onProgress && progressEvent.total) {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(percentCompleted);
+        }
       },
     });
     return parseResourceDto(response.data);

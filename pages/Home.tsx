@@ -28,6 +28,7 @@ import {
 import { useLanguage } from '../contexts/LanguageContext';
 import resourceService, { Resource } from '../services/resourceService';
 import dailyInsightService, { DailyInsightSnapshot, LOCALE_BY_LANGUAGE, getFallbackDailySnapshot } from '../services/dailyInsightService';
+import searchService, { SearchResult } from '../services/searchService';
 
 type ContentType = 'cover' | 'intro' | 'day' | 'blank';
 
@@ -76,19 +77,19 @@ const buildMonthlySheets = (
 ): BookSheet[] => {
   const sheets: BookSheet[] = [];
   const totalDays = insights.length;
-  
+
   // Sheet 0: Cover + Intro
   sheets.push({
     id: 0,
-    front: { 
-      type: 'cover', 
-      data: { 
-        month, 
-        year, 
-        title: t('home.calendar.title') || 'Lemind Almanac' 
-      } 
+    front: {
+      type: 'cover',
+      data: {
+        month,
+        year,
+        title: t('home.calendar.title') || 'Lemind Almanac'
+      }
     },
-    back: { 
+    back: {
       type: 'intro',
       data: {
         summary: t('home.calendar.subtitle') || 'Daily wisdom for makers.',
@@ -103,26 +104,26 @@ const buildMonthlySheets = (
   // Sheet 0 Front (Cover)
   // Sheet 0 Back (Left) / Sheet 1 Front (Right) -> Page 1
   // Sheet 1 Back (Left) -> Page 2 / Sheet 2 Front (Right) -> Page 3
-  
+
   // Implementation mapping:
   // Sheet 0: Front=Cover, Back=Intro
   // Sheet 1: Front=Day 1, Back=Day 2
   // Sheet 2: Front=Day 3, Back=Day 4
   // ...
-  
+
   const numDaySheets = Math.ceil(totalDays / 2);
-  
+
   for (let i = 0; i < numDaySheets; i++) {
     const dayIdx1 = i * 2; // Day 1 (index 0)
     const dayIdx2 = i * 2 + 1; // Day 2 (index 1)
-    
+
     sheets.push({
       id: i + 1,
       front: dayIdx1 < totalDays ? { type: 'day', day: dayIdx1 + 1, data: insights[dayIdx1] } : { type: 'blank' },
       back: dayIdx2 < totalDays ? { type: 'day', day: dayIdx2 + 1, data: insights[dayIdx2] } : { type: 'blank' }
     });
   }
-  
+
   // Add a back cover if needed, or just leave the last blank
   return sheets;
 };
@@ -131,21 +132,27 @@ const Home: React.FC = () => {
   const { t, language } = useLanguage();
   const navigate = useNavigate();
   const bookRef = useRef<HTMLDivElement>(null);
-  
+
   // State
   const [sheets, setSheets] = useState<BookSheet[]>([]);
   const [totalSheets, setTotalSheets] = useState(0);
-  
+
   // 3D Book State
   const [flipProgress, setFlipProgress] = useState(0); // 0 to 1 (representing total book traversal)
   const [currentSheetIndex, setCurrentSheetIndex] = useState(0); // Track strictly for "lock" mode arrows
   const [isLocked, setIsLocked] = useState(false);
   const [viewMode, setViewMode] = useState<'interactive' | 'reader'>('interactive');
-  
+
   // Data State
   const [hotResources, setHotResources] = useState<Resource[]>([]);
   const [isHotLoading, setHotLoading] = useState(true);
   const [monthlyInsights, setMonthlyInsights] = useState<DailyInsightSnapshot[]>([]);
+
+  // Search State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
 
   // 1. Load Monthly Data
   useEffect(() => {
@@ -153,11 +160,11 @@ const Home: React.FC = () => {
     // Use the new service method
     const data = dailyInsightService.getMonthlyInsights(now.getFullYear(), now.getMonth(), language);
     setMonthlyInsights(data);
-    
+
     const builtSheets = buildMonthlySheets(now.getFullYear(), now.getMonth(), data, t);
     setSheets(builtSheets);
     setTotalSheets(builtSheets.length);
-    
+
     // Auto-open to today
     // If Today is Day D (1-based).
     // D=1 (Front Sheet 1). We need to see Sheet 1 Front.
@@ -169,7 +176,7 @@ const Home: React.FC = () => {
     // Day 1 is on Sheet 1 Front.
     // If I flip Sheet 0, I see Sheet 0 Back + Sheet 1 Front. (Day 1 Visible).
     // So Flip Index = 0 (meaning 1 sheet flipped? No. Index 0 is the first sheet).
-    
+
     // Let's simplify:
     // To see Day D:
     // Target Flipped Count = Math.ceil(D / 2)
@@ -178,7 +185,7 @@ const Home: React.FC = () => {
     // If I flip Sheet 0, I see Sheet 0 Back & Sheet 1 Front (Day 1).
     // If I flip Sheet 1, I see Sheet 1 Back (Day 2) & Sheet 2 Front (Day 3).
     // So for Day 2, I need to flip 2 sheets (0 and 1).
-    
+
     const day = now.getDate();
     // If we want "Today and Tomorrow" (Day D and D+1).
     // Ideally we want D on Left or Right.
@@ -190,36 +197,36 @@ const Home: React.FC = () => {
     //   Flip sheets 0..(D/2).
     //   Example Day 2: Flip Sheet 0, 1. Visible: Day 2(L), Day 3(R).
     //   Example Day 4: Flip Sheet 0, 1, 2. Visible: Day 4(L), Day 5(R).
-    
+
     // So for any D:
     // Target Sheets to be "Left/Flipped" = Math.ceil(D / 2)
     // e.g. D=1 -> 1 (Sheet 0).
     // D=2 -> 1 (Sheet 0)? No, if I flip Sheet 0 only, I see Day 1. Day 2 is hidden on back of Sheet 1.
     // To see Day 2, I must flip Sheet 1 too. So 2 sheets.
-    
+
     // Correct Logic:
     // Day D location:
     // Sheet Index = Math.floor((D-1)/2) + 1. (Sheet 1 for Days 1,2)
     // Side: (D-1)%2 === 0 ? Front : Back.
-    
+
     // To see Sheet K Front: Flip 0..K-1. (Count K)
     // To see Sheet K Back: Flip 0..K. (Count K+1)
-    
+
     const sheetIdxOfDate = Math.floor((day - 1) / 2) + 1;
     const isBack = (day - 1) % 2 !== 0;
-    
+
     const sheetsToFlip = isBack ? sheetIdxOfDate + 1 : sheetIdxOfDate;
-    
+
     // Map sheetsToFlip to progress (0 to 1)
     // If 0 sheets flipped -> 0.0
     // If All sheets flipped -> 1.0
     // Progress ~ sheetsToFlip / totalSheets
     // But slight adjustment to be centered.
-    
+
     const targetProgress = Math.min(0.99, Math.max(0.01, sheetsToFlip / (builtSheets.length + 1))); // Approximate
-    
+
     setFlipProgress(targetProgress);
-    
+
   }, [language, t]);
 
   useEffect(() => {
@@ -284,11 +291,11 @@ const Home: React.FC = () => {
         <div className="h-full w-full bg-[#1a1d24] p-10 text-slate-300 flex flex-col justify-center relative overflow-hidden">
           <div className="absolute inset-0 opacity-10 pattern-grid-lg"></div>
           <div className="relative z-10 text-center">
-             <Quote size={32} className="text-indigo-500 mx-auto mb-6 opacity-50" />
-             <p className="text-lg font-serif italic leading-relaxed opacity-80 mb-8">"{content.data.summary}"</p>
-             <div className="flex items-center justify-center gap-2 text-xs font-mono text-indigo-400 uppercase tracking-widest">
-               <MapPin size={12} /> {content.data.location || 'Global'}
-             </div>
+            <Quote size={32} className="text-indigo-500 mx-auto mb-6 opacity-50" />
+            <p className="text-lg font-serif italic leading-relaxed opacity-80 mb-8">"{content.data.summary}"</p>
+            <div className="flex items-center justify-center gap-2 text-xs font-mono text-indigo-400 uppercase tracking-widest">
+              <MapPin size={12} /> {content.data.location || 'Global'}
+            </div>
           </div>
         </div>
       );
@@ -298,7 +305,7 @@ const Home: React.FC = () => {
       const d: DailyInsightSnapshot = content.data;
       const dateObj = new Date(d.dateISO);
       const isToday = new Date().toDateString() === dateObj.toDateString();
-      
+
       // Random visual style based on day
       const bgClass = PAGE_GRADIENTS[content.day! % PAGE_GRADIENTS.length];
       const WeatherIcon = WEATHER_ICONS[d.weather.icon || 'sun'] || Sun;
@@ -307,29 +314,29 @@ const Home: React.FC = () => {
         <div className={`h-full w-full p-6 ${bgClass} flex flex-col relative overflow-hidden`}>
           {/* Header: Date & Status */}
           <div className="flex justify-between items-start mb-6">
-             <div>
-               <div className="flex items-baseline gap-2">
-                 <span className="text-6xl font-black text-slate-900/90 tracking-tighter">{dateObj.getDate()}</span>
-                 <span className="text-sm font-bold text-slate-500 uppercase tracking-wider">{d.weekday}</span>
-               </div>
-               <div className="flex items-center gap-2 text-xs text-slate-400 mt-1">
-                  <Calendar size={12} />
-                  <span>{dateObj.getFullYear()}.{dateObj.getMonth()+1}</span>
-                  {isToday && <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-full text-[10px] font-bold ml-2">TODAY</span>}
-               </div>
-             </div>
-             <div className="flex flex-col items-end">
-               <WeatherIcon size={28} className="text-slate-700 mb-1" />
-               <span className="text-lg font-bold text-slate-700">{d.weather.temperature}°</span>
-             </div>
+            <div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-6xl font-black text-slate-900/90 tracking-tighter">{dateObj.getDate()}</span>
+                <span className="text-sm font-bold text-slate-500 uppercase tracking-wider">{d.weekday}</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-slate-400 mt-1">
+                <Calendar size={12} />
+                <span>{dateObj.getFullYear()}.{dateObj.getMonth() + 1}</span>
+                {isToday && <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-full text-[10px] font-bold ml-2">TODAY</span>}
+              </div>
+            </div>
+            <div className="flex flex-col items-end">
+              <WeatherIcon size={28} className="text-slate-700 mb-1" />
+              <span className="text-lg font-bold text-slate-700">{d.weather.temperature}°</span>
+            </div>
           </div>
-          
+
           {/* Divider */}
           <div className="w-full h-px bg-slate-900/5 mb-6"></div>
-          
+
           {/* Content Body */}
           <div className="flex-1 flex flex-col gap-5">
-            
+
             {/* Almanac Section */}
             <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-white/50 shadow-sm">
               <div className="flex justify-between items-center mb-2">
@@ -348,13 +355,13 @@ const Home: React.FC = () => {
                 </div>
               </div>
             </div>
-            
+
             {/* Image / Random Visual */}
             <div className="h-32 rounded-xl bg-slate-200 overflow-hidden relative group shadow-inner">
-              <img 
-                src={`https://picsum.photos/seed/${d.dateISO}/400/200`} 
-                alt="Daily Mood" 
-                className="w-full h-full object-cover opacity-90 group-hover:scale-110 transition-transform duration-700" 
+              <img
+                src={`https://picsum.photos/seed/${d.dateISO}/400/200`}
+                alt="Daily Mood"
+                className="w-full h-full object-cover opacity-90 group-hover:scale-110 transition-transform duration-700"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
               <div className="absolute bottom-2 left-3 text-white/90 text-[10px] font-mono">MOOD · {d.weather.condition}</div>
@@ -362,18 +369,18 @@ const Home: React.FC = () => {
 
             {/* Quote Section (Chicken Soup) */}
             <div className="mt-auto">
-               <Quote size={20} className="text-slate-900/20 mb-2" />
-               <p className="text-sm font-medium text-slate-800 italic leading-relaxed">
-                 "{d.quote.text}"
-               </p>
-               <p className="text-xs text-slate-500 mt-2 text-right">— {d.quote.author}</p>
+              <Quote size={20} className="text-slate-900/20 mb-2" />
+              <p className="text-sm font-medium text-slate-800 italic leading-relaxed">
+                "{d.quote.text}"
+              </p>
+              <p className="text-xs text-slate-500 mt-2 text-right">— {d.quote.author}</p>
             </div>
           </div>
 
           {/* Footer */}
           <div className="mt-6 flex items-center justify-between text-[10px] text-slate-400 font-mono uppercase">
-             <span>Lemind Daily</span>
-             <span>{content.day} / {monthlyInsights.length}</span>
+            <span>Lemind Daily</span>
+            <span>{content.day} / {monthlyInsights.length}</span>
           </div>
         </div>
       );
@@ -392,123 +399,182 @@ const Home: React.FC = () => {
       {/* Hero Section with 3D Book */}
       <div className="relative pt-12 pb-24 overflow-hidden">
         <div className="absolute inset-0 pointer-events-none">
-           <div className="absolute -top-20 right-0 w-[800px] h-[800px] rounded-full bg-indigo-50/80 blur-[100px]"></div>
-           <div className="absolute top-40 left-0 w-[600px] h-[600px] rounded-full bg-amber-50/80 blur-[80px]"></div>
+          <div className="absolute -top-20 right-0 w-[800px] h-[800px] rounded-full bg-indigo-50/80 blur-[100px]"></div>
+          <div className="absolute top-40 left-0 w-[600px] h-[600px] rounded-full bg-amber-50/80 blur-[80px]"></div>
         </div>
 
         <div className="max-w-[1400px] w-full mx-auto px-6 grid lg:grid-cols-12 gap-12 items-center relative z-10">
-           
-           {/* Left Text */}
-           <div className="lg:col-span-5 text-center lg:text-left">
-             <h1 className="text-5xl font-bold text-slate-900 mb-6 tracking-tight">
-               Every Day <br/><span className="text-indigo-600">Counts.</span>
-             </h1>
-             <p className="text-slate-600 mb-8 leading-relaxed">
-               {t('home.heroDesc') || "Your daily source of wisdom, weather, and inspiration. Flip through the month to find your rhythm."}
-             </p>
-             <div className="flex flex-wrap justify-center lg:justify-start gap-4">
-               <button onClick={() => navigate('/resources')} className="px-6 py-3 bg-slate-900 text-white rounded-full font-bold hover:shadow-xl hover:scale-105 transition-all flex items-center gap-2 text-sm">
-                 {t('home.btnExplore')} <ArrowRight size={16} />
-               </button>
-               <button onClick={toggleLock} className={`px-6 py-3 rounded-full font-bold border text-sm transition-all flex items-center gap-2 ${isLocked ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}>
-                 {isLocked ? <><Unlock size={16}/> Unlock Book</> : <><BookOpen size={16}/> Read Mode</>}
-               </button>
-             </div>
-             
-             <div className="mt-12 p-4 bg-white/50 backdrop-blur rounded-2xl border border-slate-100 inline-block text-left">
-               <div className="flex items-center gap-3 mb-2">
-                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Today's Focus</span>
-               </div>
-               <p className="text-sm font-medium text-slate-800">"{monthlyInsights.find(d => new Date(d.dateISO).toDateString() === new Date().toDateString())?.quote.text || 'Loading...'}"</p>
-             </div>
-           </div>
 
-           {/* Right 3D Book */}
-           <div className="lg:col-span-7 h-[500px] flex items-center justify-center perspective-container relative">
-             <div className="book-stage scale-[0.65] md:scale-[0.7]">
-               <div
-                 ref={bookRef}
-                 className={`book-core ${isLocked ? 'locked' : ''}`}
-                 onMouseMove={handleMouseMove}
-                 onMouseLeave={handleMouseLeave}
-                 style={isLocked ? { transform: 'rotateX(0deg) rotateY(0deg) translateZ(0px)' } : {}}
-               >
-                 <div className="back-cover-block"></div>
-                 <div className="spine-block">Lemind · {new Date().getFullYear()}</div>
+          {/* Left Text */}
+          <div className="lg:col-span-5 text-center lg:text-left">
+            <h1 className="text-5xl font-bold text-slate-900 mb-6 tracking-tight">
+              Every Day <br /><span className="text-indigo-600">Counts.</span>
+            </h1>
+            <p className="text-slate-600 mb-8 leading-relaxed">
+              {t('home.heroDesc') || "Your daily source of wisdom, weather, and inspiration. Flip through the month to find your rhythm."}
+            </p>
+            <div className="flex flex-wrap justify-center lg:justify-start gap-4">
+              <button onClick={() => navigate('/resources')} className="px-6 py-3 bg-slate-900 text-white rounded-full font-bold hover:shadow-xl hover:scale-105 transition-all flex items-center gap-2 text-sm">
+                {t('home.btnExplore')} <ArrowRight size={16} />
+              </button>
+              <button onClick={toggleLock} className={`px-6 py-3 rounded-full font-bold border text-sm transition-all flex items-center gap-2 ${isLocked ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}>
+                {isLocked ? <><Unlock size={16} /> Unlock Book</> : <><BookOpen size={16} /> Read Mode</>}
+              </button>
+            </div>
 
-                 {sheets.map((sheet, i) => {
-                   // Calculate rotation based on flipProgress
-                   // We have N sheets.
-                   // 0 -> All closed (Right side visible)
-                   // 1 -> All open (Left side visible)
-                   // Each sheet triggers at a specific threshold.
-                   
-                   const threshold = (i + 1) / (sheets.length + 1);
-                   const range = 0.15; // Sensitivity
-                   
-                   let rotation = 0;
-                   
-                   // Interactive Flip Logic
-                   if (viewMode === 'interactive' && !isLocked) {
-                      if (flipProgress > threshold + range/2) rotation = -178;
-                      else if (flipProgress < threshold - range/2) rotation = 0;
-                      else {
-                        // Interpolate
-                        const t = (flipProgress - (threshold - range/2)) / range;
-                        rotation = -178 * t;
-                      }
-                   } else {
-                      // Reader Mode: Snap to "open" pages
-                      // If flipProgress tells us to be at Page X.
-                      // Simple logic: If progress > threshold, flip it.
-                      rotation = flipProgress > threshold ? -178 : 0;
-                   }
+            {/* Search Bar */}
+            <div className="mt-8 relative w-full max-w-md mx-auto lg:mx-0">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    if (e.target.value.length > 1) {
+                      setIsSearching(true);
+                      searchService.searchResources(e.target.value).then(results => {
+                        setSearchResults(results);
+                        setShowSearchResults(true);
+                        setIsSearching(false);
+                      });
+                    } else {
+                      setShowSearchResults(false);
+                    }
+                  }}
+                  onFocus={() => searchQuery.length > 1 && setShowSearchResults(true)}
+                  onBlur={() => setTimeout(() => setShowSearchResults(false), 200)}
+                  placeholder="Search articles, tags..."
+                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 shadow-sm focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all"
+                />
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                  {isSearching ? (
+                    <div className="w-4 h-4 border-2 border-indigo-200 border-t-indigo-500 rounded-full animate-spin" />
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                  )}
+                </div>
+              </div>
 
-                   const isFlipped = rotation < -90;
-                   const zIndex = isFlipped ? i : (sheets.length - i); // Proper Z-stacking
+              {/* Search Results Dropdown */}
+              {showSearchResults && searchResults.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-50 max-h-80 overflow-y-auto">
+                  {searchResults.map(result => (
+                    <div
+                      key={result.id}
+                      onClick={() => navigate(`/article/${result.id}`)}
+                      className="p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0 flex gap-3"
+                    >
+                      <div className="w-12 h-12 bg-slate-100 rounded-lg overflow-hidden flex-shrink-0">
+                        <img src={result.thumbnail_url || `https://picsum.photos/seed/${result.id}/100/100`} alt="" className="w-full h-full object-cover" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-sm font-bold text-slate-800 truncate">{result.title}</h4>
+                        <p className="text-xs text-slate-500 truncate">{result.description}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-medium">{result.category_name}</span>
+                          {result.points_required > 0 && <span className="text-[10px] text-amber-600 font-bold">{result.points_required} Points</span>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
-                   return (
-                     <div
-                       key={sheet.id}
-                       className="sheet-layer"
-                       style={{
-                         transform: `translateZ(${isFlipped ? i : -i}px) rotateY(${rotation}deg)`,
-                         zIndex: zIndex + 100
-                       }}
-                     >
-                       {/* Front Face */}
-                       <div className="page-side page-front">
-                         {renderSheetContent(sheet.front, 'front')}
-                       </div>
-                       {/* Back Face */}
-                       <div className="page-side page-back">
-                         {renderSheetContent(sheet.back, 'back')}
-                       </div>
-                     </div>
-                   );
-                 })}
-               </div>
-             </div>
-             
-             {/* Controls for Reader Mode */}
-             {isLocked && (
-               <div className="absolute bottom-0 left-0 right-0 flex justify-center gap-4 pb-4">
-                 <button 
-                   onClick={() => setFlipProgress(Math.max(0, flipProgress - 0.1))}
-                   className="p-3 bg-white rounded-full shadow-lg hover:bg-slate-50 text-slate-700"
-                 >
-                   <MoveRight className="rotate-180" size={20} />
-                 </button>
-                 <button 
-                    onClick={() => setFlipProgress(Math.min(1, flipProgress + 0.1))}
-                    className="p-3 bg-white rounded-full shadow-lg hover:bg-slate-50 text-slate-700"
-                  >
-                   <MoveRight size={20} />
-                 </button>
-               </div>
-             )}
-           </div>
+            <div className="mt-12 p-4 bg-white/50 backdrop-blur rounded-2xl border border-slate-100 inline-block text-left">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Today's Focus</span>
+              </div>
+              <p className="text-sm font-medium text-slate-800">"{monthlyInsights.find(d => new Date(d.dateISO).toDateString() === new Date().toDateString())?.quote.text || 'Loading...'}"</p>
+            </div>
+          </div>
+
+          {/* Right 3D Book */}
+          <div className="lg:col-span-7 h-[500px] flex items-center justify-center perspective-container relative">
+            <div className="book-stage scale-[0.65] md:scale-[0.7]">
+              <div
+                ref={bookRef}
+                className={`book-core ${isLocked ? 'locked' : ''}`}
+                onMouseMove={handleMouseMove}
+                onMouseLeave={handleMouseLeave}
+                style={isLocked ? { transform: 'rotateX(0deg) rotateY(0deg) translateZ(0px)' } : {}}
+              >
+                <div className="back-cover-block"></div>
+                <div className="spine-block">Lemind · {new Date().getFullYear()}</div>
+
+                {sheets.map((sheet, i) => {
+                  // Calculate rotation based on flipProgress
+                  // We have N sheets.
+                  // 0 -> All closed (Right side visible)
+                  // 1 -> All open (Left side visible)
+                  // Each sheet triggers at a specific threshold.
+
+                  const threshold = (i + 1) / (sheets.length + 1);
+                  const range = 0.15; // Sensitivity
+
+                  let rotation = 0;
+
+                  // Interactive Flip Logic
+                  if (viewMode === 'interactive' && !isLocked) {
+                    if (flipProgress > threshold + range / 2) rotation = -178;
+                    else if (flipProgress < threshold - range / 2) rotation = 0;
+                    else {
+                      // Interpolate
+                      const t = (flipProgress - (threshold - range / 2)) / range;
+                      rotation = -178 * t;
+                    }
+                  } else {
+                    // Reader Mode: Snap to "open" pages
+                    // If flipProgress tells us to be at Page X.
+                    // Simple logic: If progress > threshold, flip it.
+                    rotation = flipProgress > threshold ? -178 : 0;
+                  }
+
+                  const isFlipped = rotation < -90;
+                  const zIndex = isFlipped ? i : (sheets.length - i); // Proper Z-stacking
+
+                  return (
+                    <div
+                      key={sheet.id}
+                      className="sheet-layer"
+                      style={{
+                        transform: `translateZ(${isFlipped ? i : -i}px) rotateY(${rotation}deg)`,
+                        zIndex: zIndex + 100
+                      }}
+                    >
+                      {/* Front Face */}
+                      <div className="page-side page-front">
+                        {renderSheetContent(sheet.front, 'front')}
+                      </div>
+                      {/* Back Face */}
+                      <div className="page-side page-back">
+                        {renderSheetContent(sheet.back, 'back')}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Controls for Reader Mode */}
+            {isLocked && (
+              <div className="absolute bottom-0 left-0 right-0 flex justify-center gap-4 pb-4">
+                <button
+                  onClick={() => setFlipProgress(Math.max(0, flipProgress - 0.1))}
+                  className="p-3 bg-white rounded-full shadow-lg hover:bg-slate-50 text-slate-700"
+                >
+                  <MoveRight className="rotate-180" size={20} />
+                </button>
+                <button
+                  onClick={() => setFlipProgress(Math.min(1, flipProgress + 0.1))}
+                  className="p-3 bg-white rounded-full shadow-lg hover:bg-slate-50 text-slate-700"
+                >
+                  <MoveRight size={20} />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Trending Section */}
@@ -559,14 +625,14 @@ const Home: React.FC = () => {
                   </h3>
                   <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-50">
                     <div className="flex items-center gap-1.5">
-                       <div className="w-5 h-5 rounded-full bg-slate-200 overflow-hidden">
-                         <img 
-                           src={item.author_avatar || `https://ui-avatars.com/api/?name=${item.author_username}&background=random`} 
-                           alt="" 
-                           className="w-full h-full object-cover"
-                         />
-                       </div>
-                       <span className="text-xs font-medium text-slate-500">{item.author_username}</span>
+                      <div className="w-5 h-5 rounded-full bg-slate-200 overflow-hidden">
+                        <img
+                          src={item.author_avatar || `https://ui-avatars.com/api/?name=${item.author_username}&background=random`}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <span className="text-xs font-medium text-slate-500">{item.author_username}</span>
                     </div>
                     <div className="flex items-center gap-3">
                       {/* 阅读量 */}

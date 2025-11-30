@@ -40,8 +40,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if request.method == "OPTIONS":
             return await call_next(request)
         
-        # Skip rate limiting for admin and auth endpoints
-        if request.url.path.startswith('/api/admin') or request.url.path.startswith('/api/auth'):
+        # Skip rate limiting for admin, auth, and static file streaming endpoints
+        if (request.url.path.startswith('/api/admin') or 
+            request.url.path.startswith('/api/auth') or
+            (request.url.path.startswith('/api/uploads/') and request.method == 'GET')):
             return await call_next(request)
         
         client_ip = request.client.host if request.client else "unknown"

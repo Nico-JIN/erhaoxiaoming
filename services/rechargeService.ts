@@ -1,6 +1,6 @@
-import axios from 'axios';
+import api, { API_BASE_URL } from './api';
 
-const API_URL = 'http://localhost:8000/api/recharge';
+const API_URL = `${API_BASE_URL}/api/recharge`;
 
 export interface RechargePlan {
   id: number;
@@ -75,66 +75,46 @@ export interface RechargeOrderUpdate {
 
 const rechargeService = {
   async getPlans(includeInactive = false): Promise<RechargePlan[]> {
-    const response = await axios.get(`${API_URL}/plans`, {
+    const response = await api.get<RechargePlan[]>(`${API_URL}/plans`, {
       params: { include_inactive: includeInactive },
     });
     return response.data;
   },
 
   async createPlan(planData: RechargePlanCreate): Promise<RechargePlan> {
-    const token = localStorage.getItem('access_token');
-    const response = await axios.post(`${API_URL}/plans`, planData, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const response = await api.post<RechargePlan>(`${API_URL}/plans`, planData);
     return response.data;
   },
 
   async updatePlan(planId: number, planData: RechargePlanUpdate): Promise<RechargePlan> {
-    const token = localStorage.getItem('access_token');
-    const response = await axios.put(`${API_URL}/plans/${planId}`, planData, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const response = await api.put<RechargePlan>(`${API_URL}/plans/${planId}`, planData);
     return response.data;
   },
 
   async deletePlan(planId: number): Promise<void> {
-    const token = localStorage.getItem('access_token');
-    await axios.delete(`${API_URL}/plans/${planId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    await api.delete(`${API_URL}/plans/${planId}`);
   },
 
   // 订单管理
   async createOrder(orderData: RechargeOrderCreate): Promise<RechargeOrder> {
-    const token = localStorage.getItem('access_token');
-    const response = await axios.post(`${API_URL}/orders`, orderData, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const response = await api.post<RechargeOrder>(`${API_URL}/orders`, orderData);
     return response.data;
   },
 
   async getMyOrders(): Promise<RechargeOrder[]> {
-    const token = localStorage.getItem('access_token');
-    const response = await axios.get(`${API_URL}/orders/my`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const response = await api.get<RechargeOrder[]>(`${API_URL}/orders/my`);
     return response.data;
   },
 
   async getAllOrders(status?: string): Promise<RechargeOrder[]> {
-    const token = localStorage.getItem('access_token');
-    const response = await axios.get(`${API_URL}/orders`, {
-      headers: { Authorization: `Bearer ${token}` },
+    const response = await api.get<RechargeOrder[]>(`${API_URL}/orders`, {
       params: { status },
     });
     return response.data;
   },
 
   async updateOrderStatus(orderId: number, updateData: RechargeOrderUpdate): Promise<RechargeOrder> {
-    const token = localStorage.getItem('access_token');
-    const response = await axios.put(`${API_URL}/orders/${orderId}`, updateData, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const response = await api.put<RechargeOrder>(`${API_URL}/orders/${orderId}`, updateData);
     return response.data;
   },
 };
