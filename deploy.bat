@@ -33,7 +33,7 @@ if not exist "venv" (
 echo 正在安装后端依赖...
 call venv\Scripts\activate
 echo 正在升级 pip...
-python -m pip install --upgrade pip
+python -m pip install  --upgrade pip
 echo 正在使用清华源安装依赖...
 pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
 if %errorlevel% neq 0 goto ErrorPip
@@ -60,15 +60,15 @@ echo [4/4] 正在启动服务...
 echo 正在启动后端服务器...
 start "Erhaoxiaoming Backend" cmd /k "cd /d "%PROJECT_DIR%backend" && venv\Scripts\activate && python run.py"
 
-:: 在新窗口启动前端（使用 Python SPA 服务器）
+:: 在新窗口启动前端（使用 Python 静态服务器）
 echo 正在启动前端服务器...
-start "Erhaoxiaoming Frontend" cmd /k "cd /d "%PROJECT_DIR%dist" && python "%PROJECT_DIR%spa_server.py""
+start "Erhaoxiaoming Frontend" cmd /k "cd /d "%PROJECT_DIR%dist" && echo Frontend: http://localhost:5005 && python -m http.server 5005"
 
 echo ===================================================
 echo      部署完成！
 echo ===================================================
 echo 后端 API 文档: http://localhost:8000/docs
-echo 前端访问地址: http://localhost:5005
+echo 前端访问地址: http://localhost:4173
 echo.
 pause
 exit /b 0
