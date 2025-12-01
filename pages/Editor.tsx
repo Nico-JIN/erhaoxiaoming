@@ -28,6 +28,19 @@ import categoryService, { Category } from '../services/categoryService';
 import uploadService from '../services/uploadService';
 import ImageCropper from '../components/ImageCropper';
 
+const ToolbarButton: React.FC<{ icon: React.ReactNode, onClick: () => void, label: string }> = ({ icon, onClick, label }) => (
+  <button
+    onClick={onClick}
+    className="p-2 text-slate-500 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors tooltip-trigger relative group"
+    aria-label={label}
+  >
+    {icon}
+    <span className="absolute top-full left-1/2 -translate-x-1/2 mt-1 hidden group-hover:block px-2 py-1 bg-slate-800 text-white text-xs rounded whitespace-nowrap z-50 pointer-events-none shadow-md">
+      {label}
+    </span>
+  </button>
+);
+
 const Editor: React.FC = () => {
   const { t } = useLanguage();
   const navigate = useNavigate();
@@ -78,19 +91,18 @@ Start writing your knowledge here.
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
-  const batchFileInputRef = useRef<HTMLInputElement>(null);
+
 
   // Toast notification state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // Batch upload state
-  const [batchAttachments, setBatchAttachments] = useState<Array<{
+  const [uploadingFiles, setUploadingFiles] = useState<Array<{
+    id: string;
     filename: string;
-    url: string;
-    size_formatted: string;
-    object_name: string;
+    progress: number;
+    status: 'uploading' | 'completed' | 'error';
   }>>([]);
-  const [batchUploadProgress, setBatchUploadProgress] = useState(0);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
@@ -306,32 +318,68 @@ ${after}`;
     const files = Array.from(e.target.files || []) as File[];
     if (files.length === 0) return;
 
-    try {
-      setBatchUploadProgress(0);
-      const result = await uploadService.batchUpload(files, {
-        onProgress: (progressEvent) => {
-          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          setBatchUploadProgress(percentCompleted);
-        }
-      });
-
-      setBatchAttachments(prev => [...prev, ...result.uploaded]);
-      setBatchUploadProgress(0);
-
-      if (result.errors.length > 0) {
-        showToast(`${result.success_count} files uploaded, ${result.error_count} failed`, 'info');
-      } else {
-        showToast(`${result.success_count} files uploaded successfully!`, 'success');
-      }
-    } catch (error) {
-      console.error('Batch upload failed:', error);
-      showToast('File upload failed', 'error');
-      setBatchUploadProgress(0);
+    if (!currentResource?.id) {
+      alert('Please save the article first before uploading attachments.');
+      return;
     }
+
+    const newUploads = files.map(file => ({
+      id: Math.random().toString(36).substr(2, 9),
+      filename: file.name,
+      progress: 0,
+      status: 'uploading' as const
+    }));
+
+    setUploadingFiles(prev => [...prev, ...newUploads]);
+
+    // Upload files in parallel
+    await Promise.all(files.map(async (file, index) => {
+      const uploadId = newUploads[index].id;
+      try {
+        const updatedResource = await resourceService.uploadAttachment(currentResource.id, file, (progress) => {
+          setUploadingFiles(prev => prev.map(u =>
+            u.id === uploadId ? { ...u, progress } : u
+          ));
+        });
+
+        setUploadingFiles(prev => prev.map(u =>
+          u.id === uploadId ? { ...u, status: 'completed', progress: 100 } : u
+        ));
+
+        // Update current resource to show new attachment
+        setCurrentResource(updatedResource);
+
+        // Remove from uploading list after a delay
+        setTimeout(() => {
+          setUploadingFiles(prev => prev.filter(u => u.id !== uploadId));
+        }, 2000);
+
+      } catch (error) {
+        console.error(`Failed to upload ${file.name}`, error);
+        setUploadingFiles(prev => prev.map(u =>
+          u.id === uploadId ? { ...u, status: 'error' } : u
+        ));
+        showToast(`Failed to upload ${file.name}`, 'error');
+      }
+    }));
+
+    e.target.value = ''; // Reset input
   };
 
-  const removeBatchAttachment = (index: number) => {
-    setBatchAttachments(prev => prev.filter((_, i) => i !== index));
+  const handleDeleteAttachment = async (attachmentId: number) => {
+    if (!confirm('Are you sure you want to delete this attachment?')) return;
+    try {
+      await resourceService.deleteAttachment(attachmentId);
+      // Refresh resource
+      if (currentResource) {
+        const updated = await resourceService.getResource(currentResource.id);
+        setCurrentResource(updated);
+      }
+      showToast('Attachment deleted', 'success');
+    } catch (error) {
+      console.error('Failed to delete attachment', error);
+      showToast('Failed to delete attachment', 'error');
+    }
   };
 
   const handleVideoInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -742,50 +790,90 @@ ${after}`;
           </div>
 
           {/* File & Settings Footer (Quick Access) */}
-          <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0 flex items-center justify-between z-20 relative">
-            <div className="flex items-center gap-4">
-              <label className="cursor-pointer flex items-center gap-2 text-slate-600 hover:text-indigo-600 transition-colors relative group">
-                <Upload size={18} />
-                <span className="text-sm font-medium">{t('editor.attach')}</span>
-                <input type="file" className="hidden" onChange={handleFileUpload} />
-                <span className="absolute bottom-full left-0 mb-2 hidden group-hover:block w-48 p-2 bg-slate-800 text-white text-xs rounded shadow-lg z-10">
-                  {t('editor.supports')}
-                </span>
-              </label>
-              {resourceFileName && <span className="text-xs text-slate-500">{resourceFileName}</span>}
-              {uploadProgress > 0 && (
-                <div className="flex items-center gap-2">
-                  <div className="w-32 h-2 bg-slate-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-green-500 transition-all duration-300"
-                      style={{ width: `${uploadProgress}%` }}
-                    />
+          <div className="bg-white border-t border-slate-200 p-4 flex items-center justify-between gap-6 shrink-0 z-10">
+            {/* Left: Attachments */}
+            <div className="flex-1 min-w-0 flex items-center gap-4">
+              <div className="relative group">
+                <label className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg cursor-pointer transition-colors font-medium text-sm">
+                  <Upload size={16} />
+                  <span>{t('editor.attach')}</span>
+                  <input type="file" multiple className="hidden" onChange={handleBatchFileUpload} />
+                </label>
+
+                {/* Upload Progress Popover */}
+                {uploadingFiles.length > 0 && (
+                  <div className="absolute bottom-full left-0 mb-2 w-64 bg-white rounded-xl shadow-xl border border-slate-100 p-3 z-50 animate-fade-in">
+                    <div className="space-y-2">
+                      {uploadingFiles.map(file => (
+                        <div key={file.id} className="text-xs">
+                          <div className="flex justify-between mb-1">
+                            <span className="truncate max-w-[150px]">{file.filename}</span>
+                            <span>{file.progress}%</span>
+                          </div>
+                          <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full transition-all duration-300 ${file.status === 'error' ? 'bg-red-500' : 'bg-indigo-500'}`}
+                              style={{ width: `${file.progress}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <span className="text-xs text-green-600 font-medium">{uploadProgress}%</span>
+                )}
+              </div>
+
+              {/* Attachment List (Horizontal Scroll) */}
+              {currentResource?.attachments && currentResource.attachments.length > 0 && (
+                <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-1">
+                  {currentResource.attachments.map(att => (
+                    <div key={att.id} className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg text-xs text-slate-700 shrink-0 group">
+                      <FileText size={12} className="text-indigo-500" />
+                      <span className="max-w-[100px] truncate">{att.file_name}</span>
+                      <button
+                        onClick={() => handleDeleteAttachment(att.id)}
+                        className="text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
 
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input type="checkbox" checked={isPaid} onChange={(e) => setIsPaid(e.target.checked)} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
-                <span className="text-sm text-slate-700 font-medium">{t('editor.premium')}</span>
+            {/* Right: Paid Settings */}
+            <div className="flex items-center gap-4 border-l border-slate-200 pl-6">
+              <label className="flex items-center gap-2 cursor-pointer select-none group">
+                <div className={`w-10 h-6 rounded-full p-1 transition-colors ${isPaid ? 'bg-indigo-600' : 'bg-slate-200'}`}>
+                  <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${isPaid ? 'translate-x-4' : 'translate-x-0'}`} />
+                </div>
+                <input type="checkbox" checked={isPaid} onChange={(e) => setIsPaid(e.target.checked)} className="hidden" />
+                <span className={`text-sm font-medium transition-colors ${isPaid ? 'text-indigo-600' : 'text-slate-600'}`}>
+                  {t('editor.premium')}
+                </span>
               </label>
+
               {isPaid && (
                 <div className="flex items-center gap-2 animate-fade-in">
-                  <input
-                    type="number"
-                    value={price}
-                    onChange={(e) => setPrice(Number(e.target.value))}
-                    placeholder="Pts"
-                    className="w-20 px-2 py-1 text-sm border border-slate-300 rounded focus:border-indigo-500 outline-none text-slate-900"
-                  />
-                  <span className="text-xs text-slate-500">{t('editor.points')}</span>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={price}
+                      onChange={(e) => setPrice(Number(e.target.value))}
+                      className="w-24 pl-3 pr-8 py-1.5 text-sm border border-slate-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all font-bold text-slate-700"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-medium">Pts</span>
+                  </div>
                 </div>
               )}
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Main Workspace */}
+      <div className="flex-1 flex overflow-hidden relative bg-white">
 
         {/* Preview Pane */}
         {showPreview && (
@@ -808,242 +896,181 @@ ${after}`;
       </div>
 
       {/* Publish Modal */}
-      {showPublishModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <h2 className="text-lg font-bold text-slate-800">{t('editor.publishModalTitle')}</h2>
-              <button onClick={() => setShowPublishModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X size={20} />
-              </button>
-            </div>
+      {
+        showPublishModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+              {/* Modal Header */}
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                <h2 className="text-lg font-bold text-slate-800">{t('editor.publishModalTitle')}</h2>
+                <button onClick={() => setShowPublishModal(false)} className="text-slate-400 hover:text-slate-600">
+                  <X size={20} />
+                </button>
+              </div>
 
-            {/* Modal Body */}
-            <div className="p-6 overflow-y-auto custom-scrollbar">
-              <div className="grid md:grid-cols-2 gap-6">
-                {/* Left Col: Cover & Metadata */}
-                <div className="space-y-6">
-                  {/* Cover Image */}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">{t('editor.coverImage')}</label>
-                    <div
-                      onClick={() => coverInputRef.current?.click()}
-                      className="border-2 border-dashed border-slate-300 rounded-xl h-48 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition-colors overflow-hidden relative group"
-                    >
-                      {coverImage ? (
-                        <img src={coverImage} alt="Cover" className="w-full h-full object-cover" />
-                      ) : (
-                        <>
-                          <ImageIcon size={32} className="text-slate-300 mb-2 group-hover:text-indigo-500" />
-                          <span className="text-xs text-slate-500 font-medium">{t('editor.uploadCover')}</span>
-                        </>
-                      )}
-                      {coverImage && !coverUploading && (
-                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                          <span className="text-white text-sm font-bold">{t('editor.uploadCover')}</span>
-                        </div>
-                      )}
-                      {coverUploading && (
-                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-sm font-semibold">
-                          {t('editor.uploading')}
-                        </div>
-                      )}
+              {/* Modal Body */}
+              <div className="p-6 overflow-y-auto custom-scrollbar">
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* Left Col: Cover & Metadata */}
+                  <div className="space-y-6">
+                    {/* Cover Image */}
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">{t('editor.coverImage')}</label>
+                      <div
+                        onClick={() => coverInputRef.current?.click()}
+                        className="border-2 border-dashed border-slate-300 rounded-xl h-48 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition-colors overflow-hidden relative group"
+                      >
+                        {coverImage ? (
+                          <img src={coverImage} alt="Cover" className="w-full h-full object-cover" />
+                        ) : (
+                          <>
+                            <ImageIcon size={32} className="text-slate-300 mb-2 group-hover:text-indigo-500" />
+                            <span className="text-xs text-slate-500 font-medium">{t('editor.uploadCover')}</span>
+                          </>
+                        )}
+                        {coverImage && !coverUploading && (
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span className="text-white text-sm font-bold">{t('editor.uploadCover')}</span>
+                          </div>
+                        )}
+                        {coverUploading && (
+                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-sm font-semibold">
+                            {t('editor.uploading')}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Category */}
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">{t('editor.category')}</label>
+                      <select
+                        value={selectedCategoryId ?? ''}
+                        onChange={(e) => setSelectedCategoryId(Number(e.target.value))}
+                        className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"
+                      >
+                        {categories.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 
-                  {/* Category */}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">{t('editor.category')}</label>
-                    <select
-                      value={selectedCategoryId ?? ''}
-                      onChange={(e) => setSelectedCategoryId(Number(e.target.value))}
-                      className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"
-                    >
-                      {categories.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Right Col: Summary & Tags */}
-                <div className="space-y-6">
-                  {/* Summary */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-sm font-medium text-slate-700">{t('editor.summary')}</label>
-                      <button
-                        onClick={handleGenerateSummary}
-                        disabled={isGeneratingSummary}
-                        className="text-xs flex items-center gap-1 text-indigo-600 hover:text-indigo-700 font-medium disabled:opacity-50"
-                      >
-                        <Wand2 size={12} />
-                        {isGeneratingSummary ? t('editor.generating') : t('editor.aiGenerate')}
-                      </button>
-                    </div>
-                    <textarea
-                      value={summary}
-                      onChange={(e) => setSummary(e.target.value)}
-                      placeholder={t('editor.summaryPlaceholder')}
-                      className="w-full h-32 px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none text-sm resize-none"
-                    />
-                  </div>
-
-                  {/* Tags */}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">{t('editor.tags')}</label>
-                    <input
-                      type="text"
-                      value={tags}
-                      onChange={(e) => setTags(e.target.value)}
-                      placeholder={t('editor.tagsPlaceholder')}
-                      className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"
-                    />
-                  </div>
-
-                  {/* Batch Attachments */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-sm font-medium text-slate-700">Attachments</label>
-                      <button
-                        onClick={() => batchFileInputRef.current?.click()}
-                        className="text-xs flex items-center gap-1 text-indigo-600 hover:text-indigo-700 font-medium"
-                      >
-                        <Upload size={12} />
-                        Add Files
-                      </button>
-                      <input
-                        ref={batchFileInputRef}
-                        type="file"
-                        multiple
-                        onChange={handleBatchFileUpload}
-                        className="hidden"
+                  {/* Right Col: Summary & Tags */}
+                  <div className="space-y-6">
+                    {/* Summary */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-sm font-medium text-slate-700">{t('editor.summary')}</label>
+                        <button
+                          onClick={handleGenerateSummary}
+                          disabled={isGeneratingSummary}
+                          className="text-xs flex items-center gap-1 text-indigo-600 hover:text-indigo-700 font-medium disabled:opacity-50"
+                        >
+                          <Wand2 size={12} />
+                          {isGeneratingSummary ? t('editor.generating') : t('editor.aiGenerate')}
+                        </button>
+                      </div>
+                      <textarea
+                        value={summary}
+                        onChange={(e) => setSummary(e.target.value)}
+                        placeholder={t('editor.summaryPlaceholder')}
+                        className="w-full h-32 px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none text-sm resize-none"
                       />
                     </div>
 
-                    {/* Progress Bar */}
-                    {batchUploadProgress > 0 && (
-                      <div className="w-full bg-slate-100 rounded-full h-1.5 mb-3 overflow-hidden">
-                        <div
-                          className="bg-indigo-500 h-1.5 rounded-full transition-all duration-300"
-                          style={{ width: `${batchUploadProgress}%` }}
-                        />
-                      </div>
-                    )}
+                    {/* Tags */}
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">{t('editor.tags')}</label>
+                      <input
+                        type="text"
+                        value={tags}
+                        onChange={(e) => setTags(e.target.value)}
+                        placeholder={t('editor.tagsPlaceholder')}
+                        className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"
+                      />
+                    </div>
 
-                    {/* File List */}
-                    {batchAttachments.length > 0 ? (
-                      <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
-                        {batchAttachments.map((file, idx) => (
-                          <div key={idx} className="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-100 text-xs">
-                            <div className="flex items-center gap-2 overflow-hidden">
-                              <FileText size={12} className="text-slate-400 flex-shrink-0" />
-                              <span className="truncate text-slate-600" title={file.filename}>{file.filename}</span>
-                              <span className="text-slate-400 text-[10px]">({file.size_formatted})</span>
-                            </div>
-                            <button
-                              onClick={() => removeBatchAttachment(idx)}
-                              className="text-slate-400 hover:text-red-500 transition-colors"
-                            >
-                              <X size={12} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-xs text-slate-400 italic p-2 bg-slate-50 rounded border border-slate-100 border-dashed text-center">
-                        No attachments
-                      </div>
-                    )}
-                  </div>
 
-                  {/* Price Confirmation */}
-                  <div className="pt-4 border-t border-slate-100">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-slate-700">{t('editor.premium')}</span>
-                      <div className="flex items-center gap-2">
-                        <input type="checkbox" checked={isPaid} onChange={(e) => setIsPaid(e.target.checked)} className="rounded border-slate-300 text-indigo-600" />
-                        {isPaid && (
-                          <input
-                            type="number"
-                            value={price}
-                            onChange={(e) => setPrice(Number(e.target.value))}
-                            className="w-20 px-2 py-1 text-sm border border-slate-300 rounded text-center"
-                          />
-                        )}
-                        {isPaid && <span className="text-sm text-slate-500">Pts</span>}
+
+                    {/* Price Confirmation */}
+                    <div className="pt-4 border-t border-slate-100">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-slate-700">{t('editor.premium')}</span>
+                        <div className="flex items-center gap-2">
+                          <input type="checkbox" checked={isPaid} onChange={(e) => setIsPaid(e.target.checked)} className="rounded border-slate-300 text-indigo-600" />
+                          {isPaid && (
+                            <input
+                              type="number"
+                              value={price}
+                              onChange={(e) => setPrice(Number(e.target.value))}
+                              className="w-20 px-2 py-1 text-sm border border-slate-300 rounded text-center"
+                            />
+                          )}
+                          {isPaid && <span className="text-sm text-slate-500">Pts</span>}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Modal Footer */}
-            <div className="p-6 border-t border-slate-100 bg-slate-50 flex flex-col gap-4">
-              {/* Upload Progress Bar */}
-              {uploadProgress > 0 && (
-                <div className="w-full">
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-slate-500">{t('editor.uploadingAttachment')}...</span>
-                    <span className="text-indigo-600 font-medium">{uploadProgress}%</span>
+              {/* Modal Footer */}
+              <div className="p-6 border-t border-slate-100 bg-slate-50 flex flex-col gap-4">
+                {/* Upload Progress Bar */}
+                {uploadProgress > 0 && (
+                  <div className="w-full">
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-slate-500">{t('editor.uploadingAttachment')}...</span>
+                      <span className="text-indigo-600 font-medium">{uploadProgress}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-indigo-500 transition-all duration-300"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-indigo-500 transition-all duration-300"
-                      style={{ width: `${uploadProgress}%` }}
-                    />
-                  </div>
+                )}
+
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => setShowPublishModal(false)}
+                    className="px-5 py-2.5 rounded-xl text-slate-600 font-medium hover:bg-slate-100 transition-colors"
+                  >
+                    {t('editor.cancel')}
+                  </button>
+                  <button
+                    onClick={handleFinalPublish}
+                    disabled={isPublishing}
+                    className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-colors disabled:opacity-70 flex items-center gap-2"
+                  >
+                    {isPublishing && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                    {isPublishing ? 'Saving…' : isEditing ? 'Save Changes' : t('editor.confirmPublish')}
+                  </button>
                 </div>
-              )}
-
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={() => setShowPublishModal(false)}
-                  className="px-5 py-2.5 rounded-xl text-slate-600 font-medium hover:bg-slate-100 transition-colors"
-                >
-                  {t('editor.cancel')}
-                </button>
-                <button
-                  onClick={handleFinalPublish}
-                  disabled={isPublishing}
-                  className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-colors disabled:opacity-70 flex items-center gap-2"
-                >
-                  {isPublishing && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                  {isPublishing ? 'Saving…' : isEditing ? 'Save Changes' : t('editor.confirmPublish')}
-                </button>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
       {/* Image Cropper Modal */}
-      {cropImageSrc && (
-        <ImageCropper
-          image={cropImageSrc}
-          onCropComplete={handleCropComplete}
-          onCancel={() => setCropImageSrc(null)}
-          aspectRatio={16 / 10}
-        />
-      )}
-    </div>
+      {
+        cropImageSrc && (
+          <ImageCropper
+            image={cropImageSrc}
+            onCropComplete={handleCropComplete}
+            onCancel={() => setCropImageSrc(null)}
+            aspectRatio={16 / 10}
+          />
+        )
+      }
+    </div >
   );
 };
 
-const ToolbarButton: React.FC<{ icon: React.ReactNode, onClick: () => void, label: string }> = ({ icon, onClick, label }) => (
-  <button
-    onClick={onClick}
-    className="p-2 text-slate-500 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors tooltip-trigger relative group"
-    aria-label={label}
-  >
-    {icon}
-    <span className="absolute top-full left-1/2 -translate-x-1/2 mt-1 hidden group-hover:block px-2 py-1 bg-slate-800 text-white text-xs rounded whitespace-nowrap z-50 pointer-events-none shadow-md">
-      {label}
-    </span>
-  </button>
-);
+
 
 export default Editor;

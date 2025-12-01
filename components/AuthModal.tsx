@@ -45,6 +45,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           phone: phone || undefined,
           full_name: fullName || undefined,
         });
+        localStorage.setItem('show_welcome_bonus', 'true');
         showToast('🎉 注册成功！欢迎加入 Lemind', 'success');
       } else {
         // Login

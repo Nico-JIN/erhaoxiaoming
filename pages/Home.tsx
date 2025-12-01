@@ -28,7 +28,6 @@ import {
 import { useLanguage } from '../contexts/LanguageContext';
 import resourceService, { Resource } from '../services/resourceService';
 import dailyInsightService, { DailyInsightSnapshot, LOCALE_BY_LANGUAGE, getFallbackDailySnapshot } from '../services/dailyInsightService';
-import searchService, { SearchResult } from '../services/searchService';
 
 type ContentType = 'cover' | 'intro' | 'day' | 'blank';
 
@@ -148,11 +147,7 @@ const Home: React.FC = () => {
   const [isHotLoading, setHotLoading] = useState(true);
   const [monthlyInsights, setMonthlyInsights] = useState<DailyInsightSnapshot[]>([]);
 
-  // Search State
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [showSearchResults, setShowSearchResults] = useState(false);
+
 
   // 1. Load Monthly Data
   useEffect(() => {
@@ -422,64 +417,7 @@ const Home: React.FC = () => {
               </button>
             </div>
 
-            {/* Search Bar */}
-            <div className="mt-8 relative w-full max-w-md mx-auto lg:mx-0">
-              <div className="relative">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    if (e.target.value.length > 1) {
-                      setIsSearching(true);
-                      searchService.searchResources(e.target.value).then(results => {
-                        setSearchResults(results);
-                        setShowSearchResults(true);
-                        setIsSearching(false);
-                      });
-                    } else {
-                      setShowSearchResults(false);
-                    }
-                  }}
-                  onFocus={() => searchQuery.length > 1 && setShowSearchResults(true)}
-                  onBlur={() => setTimeout(() => setShowSearchResults(false), 200)}
-                  placeholder="Search articles, tags..."
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 shadow-sm focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all"
-                />
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                  {isSearching ? (
-                    <div className="w-4 h-4 border-2 border-indigo-200 border-t-indigo-500 rounded-full animate-spin" />
-                  ) : (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-                  )}
-                </div>
-              </div>
 
-              {/* Search Results Dropdown */}
-              {showSearchResults && searchResults.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-50 max-h-80 overflow-y-auto">
-                  {searchResults.map(result => (
-                    <div
-                      key={result.id}
-                      onClick={() => navigate(`/article/${result.id}`)}
-                      className="p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0 flex gap-3"
-                    >
-                      <div className="w-12 h-12 bg-slate-100 rounded-lg overflow-hidden flex-shrink-0">
-                        <img src={result.thumbnail_url || `https://picsum.photos/seed/${result.id}/100/100`} alt="" className="w-full h-full object-cover" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-sm font-bold text-slate-800 truncate">{result.title}</h4>
-                        <p className="text-xs text-slate-500 truncate">{result.description}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-medium">{result.category_name}</span>
-                          {result.points_required > 0 && <span className="text-[10px] text-amber-600 font-bold">{result.points_required} Points</span>}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
 
             <div className="mt-12 p-4 bg-white/50 backdrop-blur rounded-2xl border border-slate-100 inline-block text-left">
               <div className="flex items-center gap-3 mb-2">

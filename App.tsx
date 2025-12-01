@@ -13,7 +13,8 @@ import OAuthCallback from './pages/OAuthCallback';
 import OAuthSuccess from './pages/OAuthSuccess';
 import OAuthError from './pages/OAuthError';
 import PageTracker from './components/PageTracker';
-import { Search, Wallet, Globe } from 'lucide-react';
+import { Search, Wallet, Globe, X } from 'lucide-react';
+import searchService, { SearchResult } from './services/searchService';
 import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Language } from './i18n/translations';
@@ -28,6 +29,12 @@ const Navbar: React.FC<{ onLoginClick: () => void }> = ({ onLoginClick }) => {
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+
+  // Search State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
 
   const toggleLang = (lang: Language) => {
     setLanguage(lang);
@@ -57,9 +64,60 @@ const Navbar: React.FC<{ onLoginClick: () => void }> = ({ onLoginClick }) => {
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="hidden md:flex items-center bg-slate-100 px-4 py-2.5 rounded-full border border-transparent focus-within:border-indigo-200 focus-within:bg-white transition-all">
-            <Search size={18} className="text-slate-400 mr-2" />
-            <input type="text" placeholder={t('nav.search')} className="bg-transparent border-none outline-none text-sm text-slate-700 w-56 placeholder-slate-400" />
+          <div className="relative hidden md:block z-50">
+            <div className="flex items-center bg-slate-100 px-4 py-2.5 rounded-full border border-transparent focus-within:border-indigo-200 focus-within:bg-white transition-all w-64">
+              <Search size={18} className="text-slate-400 mr-2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  if (e.target.value.length > 1) {
+                    setIsSearching(true);
+                    searchService.searchResources(e.target.value).then(results => {
+                      setSearchResults(results);
+                      setShowSearchResults(true);
+                      setIsSearching(false);
+                    });
+                  } else {
+                    setShowSearchResults(false);
+                  }
+                }}
+                onFocus={() => searchQuery.length > 1 && setShowSearchResults(true)}
+                onBlur={() => setTimeout(() => setShowSearchResults(false), 200)}
+                placeholder={t('nav.search')}
+                className="bg-transparent border-none outline-none text-sm text-slate-700 w-full placeholder-slate-400"
+              />
+              {isSearching && <div className="w-3 h-3 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin ml-2"></div>}
+            </div>
+
+            {/* Search Results Dropdown */}
+            {showSearchResults && searchResults.length > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden max-h-96 overflow-y-auto">
+                {searchResults.map(result => (
+                  <div
+                    key={result.id}
+                    onClick={() => {
+                      navigate(`/article/${result.id}`);
+                      setShowSearchResults(false);
+                      setSearchQuery('');
+                    }}
+                    className="p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0 flex gap-3"
+                  >
+                    <div className="w-10 h-10 bg-slate-100 rounded-lg overflow-hidden flex-shrink-0">
+                      <img src={result.thumbnail_url || `https://picsum.photos/seed/${result.id}/100/100`} alt="" className="w-full h-full object-cover" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-bold text-slate-800 truncate">{result.title}</h4>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-medium">{result.category_name}</span>
+                        {result.points_required > 0 && <span className="text-[10px] text-amber-600 font-bold">{result.points_required} Pts</span>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Language Switcher */}
@@ -181,14 +239,25 @@ const ProtectedRoute: React.FC<{ children: ReactNode; requiredRole?: UserRole }>
   return <>{children}</>;
 };
 
+import WelcomeModal from './components/WelcomeModal';
+
 const AppContent: React.FC = () => {
   const [isAuthModalOpen, setAuthModalOpen] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
     const handler = () => setAuthModalOpen(true);
     window.addEventListener('open-auth-modal', handler);
     return () => window.removeEventListener('open-auth-modal', handler);
   }, []);
+
+  useEffect(() => {
+    if (user && localStorage.getItem('show_welcome_bonus') === 'true') {
+      setShowWelcome(true);
+      localStorage.removeItem('show_welcome_bonus');
+    }
+  }, [user]);
 
   return (
     <>
@@ -240,6 +309,11 @@ const AppContent: React.FC = () => {
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setAuthModalOpen(false)}
+      />
+
+      <WelcomeModal
+        isOpen={showWelcome}
+        onClose={() => setShowWelcome(false)}
       />
     </>
   );

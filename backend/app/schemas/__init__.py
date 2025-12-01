@@ -175,6 +175,21 @@ class ResourceResponse(ResourceBase):
     like_count: int = 0
     comment_count: int = 0
     is_liked_by_user: bool = False
+    attachments: List["ResourceAttachmentResponse"] = Field(default_factory=list)
+
+    class Config:
+        from_attributes = True
+
+
+class ResourceAttachmentResponse(BaseModel):
+    id: int
+    resource_id: str
+    file_name: str
+    file_url: str
+    file_size: Optional[str]
+    file_type: Optional[str]
+    download_count: int
+    created_at: datetime
 
     class Config:
         from_attributes = True
