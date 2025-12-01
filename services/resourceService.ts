@@ -36,6 +36,18 @@ export interface ResourceDto {
   like_count?: number;
   comment_count?: number;
   is_liked_by_user?: boolean;
+  attachments?: ResourceAttachmentDto[];
+}
+
+export interface ResourceAttachmentDto {
+  id: number;
+  resource_id: string;
+  file_name: string;
+  file_url: string;
+  file_size?: string;
+  file_type?: string;
+  download_count: number;
+  created_at: string;
 }
 
 export interface Resource extends Omit<ResourceDto, 'tags' | 'tags_list'> {
@@ -131,6 +143,10 @@ export const parseResourceDto = (payload: ResourceDto): Resource => {
     thumbnail_url: resolvedThumb || undefined,
     file_key: fileKey,
     file_url: resolvedFile,
+    attachments: payload.attachments?.map(att => ({
+      ...att,
+      file_url: uploadService.getPublicUrl(att.file_url) || att.file_url
+    }))
   };
 };
 
@@ -190,6 +206,38 @@ class ResourceService {
       },
     });
     return parseResourceDto(response.data);
+  }
+
+  async uploadAttachment(resourceId: string | number, file: File, onProgress?: (progress: number) => void): Promise<Resource> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await api.post<ResourceDto>(`/api/resources/${resourceId}/attachments`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress: (progressEvent) => {
+        if (onProgress && progressEvent.total) {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(percentCompleted);
+        }
+      },
+    });
+    return parseResourceDto(response.data);
+  }
+
+  async deleteAttachment(attachmentId: number): Promise<void> {
+    await api.delete(`/api/resources/attachments/${attachmentId}`);
+  }
+
+  async downloadAttachment(attachmentId: number): Promise<DownloadResourceResponse> {
+    const response = await api.get<DownloadResourceResponse>(
+      `/api/resources/attachments/${attachmentId}/download`
+    );
+    return {
+      ...response.data,
+      download_url: ensureAbsoluteUrl(response.data.download_url) ?? response.data.download_url,
+    };
   }
 
   async downloadResource(resourceId: string | number): Promise<DownloadResourceResponse> {
