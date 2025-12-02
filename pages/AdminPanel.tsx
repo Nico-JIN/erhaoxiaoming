@@ -16,7 +16,14 @@ import {
   Smartphone,
   LogOut,
   BarChart,
+  Bell,
+  MessageSquare,
+  Heart,
+  Download,
+  Eye,
+  MessageCircle,
 } from 'lucide-react';
+import notificationService, { Notification, NotificationStats } from '../services/notificationService';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -30,7 +37,7 @@ import NotificationSound from '../components/NotificationSound';
 import rechargeService, { RechargePlan, RechargeOrder } from '../services/rechargeService';
 import adminService, { DashboardStats, OperationLog, UserManagement, VisitStats, VisitorLog } from '../services/adminService';
 
-type AdminTab = 'dashboard' | 'users' | 'content' | 'finance' | 'categories' | 'payment' | 'logs' | 'analytics';
+type AdminTab = 'dashboard' | 'users' | 'content' | 'finance' | 'categories' | 'payment' | 'logs' | 'analytics' | 'notifications';
 
 const AdminPanel: React.FC = () => {
   const { t } = useLanguage();
@@ -44,6 +51,7 @@ const AdminPanel: React.FC = () => {
     payment: t('admin.payment'),
     logs: t('admin.tabTitles.logs'),
     analytics: 'Analytics',
+    notifications: '消息通知',
   };
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -112,6 +120,10 @@ const AdminPanel: React.FC = () => {
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [editingStatsResource, setEditingStatsResource] = useState<Resource | null>(null);
   const [statsForm, setStatsForm] = useState({ views: 0, downloads: 0 });
+
+  // Notification State
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notificationStats, setNotificationStats] = useState<NotificationStats | null>(null);
 
   const slugify = (value: string) =>
     value
@@ -190,6 +202,12 @@ const AdminPanel: React.FC = () => {
         setVisitorLogs(visitorLogsData.logs);
         setVisitorLogsTotal(visitorLogsData.total);
       }
+
+      // Load notifications
+      const notifStats = await notificationService.getStats();
+      setNotificationStats(notifStats);
+      const notifList = await notificationService.getNotifications();
+      setNotifications(notifList);
     } catch (error) {
       console.error('Failed to load admin data', error);
       setMessage(t('admin.loadError'));
@@ -749,6 +767,118 @@ const AdminPanel: React.FC = () => {
       <Icon size={18} className={activeTab === id ? 'text-indigo-600' : 'text-slate-400'} />
       {label}
     </button>
+  );
+
+  const renderNotifications = () => (
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold text-slate-800">消息通知</h2>
+        <button
+          onClick={async () => {
+            await notificationService.markAllAsRead();
+            const list = await notificationService.getNotifications();
+            setNotifications(list);
+            const stats = await notificationService.getStats();
+            setNotificationStats(stats);
+          }}
+          className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors text-sm font-medium"
+        >
+          全部已读
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+          <div className="text-slate-500 text-sm mb-1">点赞</div>
+          <div className="text-2xl font-bold text-pink-500">{notificationStats?.like || 0}</div>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+          <div className="text-slate-500 text-sm mb-1">评论</div>
+          <div className="text-2xl font-bold text-blue-500">{notificationStats?.comment || 0}</div>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+          <div className="text-slate-500 text-sm mb-1">下载</div>
+          <div className="text-2xl font-bold text-green-500">{notificationStats?.download || 0}</div>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+          <div className="text-slate-500 text-sm mb-1">私信</div>
+          <div className="text-2xl font-bold text-indigo-500">{notificationStats?.message || 0}</div>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+          <div className="text-slate-500 text-sm mb-1">系统</div>
+          <div className="text-2xl font-bold text-purple-500">{notificationStats?.system || 0}</div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="divide-y divide-slate-100">
+          {notifications.length === 0 ? (
+            <div className="p-8 text-center text-slate-400">暂无消息</div>
+          ) : (
+            notifications.map((notif) => (
+              <div
+                key={notif.id}
+                onClick={() => {
+                  if (notif.notification_type === 'MESSAGE' && notif.actor_id) {
+                    navigate(`/messages?userId=${notif.actor_id}`);
+                  } else if (notif.resource_id) {
+                    navigate(`/article/${notif.resource_id}`);
+                  }
+                }}
+                className={`p-4 hover:bg-slate-50 transition-colors flex gap-4 cursor-pointer ${!notif.is_read ? 'bg-indigo-50/30' : ''}`}
+              >
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${notif.notification_type === 'LIKE' ? 'bg-pink-100 text-pink-500' :
+                  notif.notification_type === 'COMMENT' ? 'bg-blue-100 text-blue-500' :
+                    notif.notification_type === 'DOWNLOAD' ? 'bg-green-100 text-green-500' :
+                      notif.notification_type === 'MESSAGE' ? 'bg-indigo-100 text-indigo-500' :
+                        'bg-purple-100 text-purple-500'
+                  }`}>
+                  {notif.notification_type === 'LIKE' && <Heart size={20} />}
+                  {notif.notification_type === 'COMMENT' && <MessageCircle size={20} />}
+                  {notif.notification_type === 'DOWNLOAD' && <Download size={20} />}
+                  {notif.notification_type === 'VIEW' && <Eye size={20} />}
+                  {notif.notification_type === 'MESSAGE' && <MessageCircle size={20} />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium text-slate-900">
+                      {notif.actor_username || 'System'}
+                      <span className="font-normal text-slate-500 ml-2">
+                        {notif.notification_type === 'LIKE' && '点赞了你的文章'}
+                        {notif.notification_type === 'COMMENT' && '评论了你的文章'}
+                        {notif.notification_type === 'DOWNLOAD' && '下载了你的资源'}
+                        {notif.notification_type === 'VIEW' && '浏览了你的文章'}
+                        {notif.notification_type === 'MESSAGE' && '给你发送了私信'}
+                      </span>
+                    </span>
+                    <span className="text-xs text-slate-400">{new Date(notif.created_at).toLocaleString()}</span>
+                  </div>
+                  <p className="text-slate-600 text-sm line-clamp-2">{notif.content}</p>
+                  {notif.resource_title && (
+                    <div className="mt-2 text-xs text-indigo-600 bg-indigo-50 inline-block px-2 py-1 rounded">
+                      {notif.resource_title}
+                    </div>
+                  )}
+                </div>
+                {!notif.is_read && (
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      await notificationService.markAsRead(notif.id);
+                      setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, is_read: true } : n));
+                      const stats = await notificationService.getStats();
+                      setNotificationStats(stats);
+                    }}
+                    className="w-2 h-2 bg-red-500 rounded-full mt-2"
+                    title="Mark as read"
+                  ></button>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
   );
 
   const DashboardCard = ({ label, value, delta, icon: Icon, positive = true }: { label: string; value: string; delta?: number; icon: any; positive?: boolean }) => (
@@ -1643,6 +1773,8 @@ const AdminPanel: React.FC = () => {
             </div>
           </div>
         );
+      case 'notifications':
+        return renderNotifications();
       default:
         return <div className="p-12 text-center text-slate-400">{t('admin.comingSoon')}</div>;
     }
@@ -1727,6 +1859,14 @@ const AdminPanel: React.FC = () => {
           <SidebarItem id="categories" icon={Layers} label={t('admin.categories')} />
           <div className="pt-3 mt-3 border-t border-slate-100">
             <SidebarItem id="analytics" icon={BarChart} label="Analytics" />
+            <div className="relative">
+              <SidebarItem id="notifications" icon={Bell} label="消息通知" />
+              {notificationStats && notificationStats.total > 0 && (
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                  {notificationStats.total}
+                </span>
+              )}
+            </div>
             <SidebarItem id="logs" icon={Activity} label={t('admin.logs')} />
           </div>
         </div>

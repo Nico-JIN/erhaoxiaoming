@@ -43,6 +43,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Skip rate limiting for admin, auth, and static file streaming endpoints
         if (request.url.path.startswith('/api/admin') or 
             request.url.path.startswith('/api/auth') or
+            request.url.path.startswith('/api/notifications') or
             (request.url.path.startswith('/api/uploads/') and request.method == 'GET')):
             return await call_next(request)
         

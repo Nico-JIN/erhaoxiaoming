@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { Lock, FileText, Download, List, Heart, MessageCircle, Send, Eye } from 'lucide-react';
 import { marked } from 'marked';
@@ -9,6 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import resourceService, { Resource } from '../services/resourceService';
 import interactionsService, { Comment } from '../services/interactionsService';
 import CommentModal from '../components/CommentModal';
+import ChatModal from '../components/ChatModal';
 
 // 格式化数字显示（超过1000显示K，超过1000000显示M）
 const formatCount = (count: number): string => {
@@ -54,6 +55,7 @@ const ArticleView: React.FC = () => {
   const [showCommentModal, setShowCommentModal] = useState(false);
   const [showReplyModal, setShowReplyModal] = useState(false);
   const [replyToComment, setReplyToComment] = useState<Comment | null>(null);
+  const [showChatModal, setShowChatModal] = useState(false);
 
   // Config marked renderer and add IDs to headings
   const htmlContent = useMemo(() => {
@@ -83,13 +85,25 @@ const ArticleView: React.FC = () => {
       level: parseInt(heading.tagName.substring(1))
     }));
   }, [htmlContent]);
+  // Track if we've already incremented views for this article in this session
+  const viewCountedRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     const loadResource = async () => {
       if (!id) return;
       try {
         setLoading(true);
         setError(null);
-        const data = await resourceService.getResource(id);
+
+        // Check if we've already counted this view
+        const shouldIncrement = !viewCountedRef.current.has(id);
+
+        const data = await resourceService.getResource(id, shouldIncrement);
+
+        if (shouldIncrement) {
+          viewCountedRef.current.add(id);
+        }
+
         setResource(data);
         setIsUnlocked(data.is_free || data.points_required === 0 || data.is_purchased_by_user === true);
 
@@ -312,6 +326,21 @@ const ArticleView: React.FC = () => {
               />
               <div>
                 <p className="font-medium text-slate-900">{resource.author_username || 'Lemind Team'}</p>
+                {(!user || user.id !== resource.author_id) && (
+                  <button
+                    onClick={() => {
+                      if (!user) {
+                        window.dispatchEvent(new CustomEvent('open-auth-modal'));
+                        return;
+                      }
+                      setShowChatModal(true);
+                    }}
+                    className="text-xs text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1 mt-1"
+                  >
+                    <MessageCircle size={14} />
+                    私聊
+                  </button>
+                )}
               </div>
             </div>
             {isPaid && (
@@ -428,36 +457,41 @@ const ArticleView: React.FC = () => {
           )}
         </div>
 
-        {/* Attachments Sidebar - 右侧固定 */}
-        {isUnlocked && ((resource.attachments && resource.attachments.length > 0) || resource.file_url) && (
-          <div className="hidden xl:block fixed right-8 top-32 w-80 z-20 max-h-[calc(100vh-200px)] overflow-y-auto custom-scrollbar">
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 animate-fade-in">
-              <h3 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
-                <div className="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center">
-                  <Download size={16} />
+
+
+        <div className="max-w-4xl mx-auto">
+
+          {/* 附件区域 - 统一显示在文章底部 */}
+          {isUnlocked && ((resource.attachments && resource.attachments.length > 0) || resource.file_url) && (
+            <div className="mt-16 border-t-2 border-slate-200 pt-12">
+              <h3 className="text-2xl font-bold text-slate-900 mb-6 flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center">
+                  <Download size={20} />
                 </div>
                 {t('article.attachedResources')}
               </h3>
-              <div className="space-y-3">
+              <div className={`grid grid-cols-1 ${resource.attachments && resource.attachments.length > 1 ? 'md:grid-cols-2' : ''} gap-4`}>
                 {/* Legacy File URL Support */}
                 {resource.file_url && (!resource.attachments || resource.attachments.length === 0) && (
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 hover:border-indigo-200 transition-colors group">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="p-2 bg-white text-indigo-600 rounded-lg shadow-sm">
-                        <FileText size={16} />
+                  <div className="p-4 bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl border-2 border-slate-200 hover:border-indigo-300 transition-all group shadow-sm hover:shadow-lg">
+                    <div className="flex items-center gap-4 mb-3">
+                      <div className="p-3 bg-white text-indigo-600 rounded-lg shadow-md">
+                        <FileText size={20} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-slate-900 text-sm truncate">{getFilename(resource.file_url)}</p>
-                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <p className="font-semibold text-slate-900 text-base truncate">{getFilename(resource.file_url)}</p>
+                        <div className="flex items-center gap-2 text-sm text-slate-500 mt-1">
                           <span>{resource.file_size || 'Unknown'}</span>
+                          <span>•</span>
+                          <span>{formatCount(resource.downloads || 0)} 次下载</span>
                         </div>
                       </div>
                     </div>
                     <button
                       onClick={() => handleDownload()}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-700 text-xs font-bold shadow-sm hover:text-indigo-600 hover:border-indigo-200 transition-all"
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-lg font-semibold shadow-md hover:bg-indigo-700 transition-all transform hover:scale-[1.02]"
                     >
-                      <Download size={14} />
+                      <Download size={18} />
                       {t('article.download')}
                     </button>
                   </div>
@@ -465,52 +499,32 @@ const ArticleView: React.FC = () => {
 
                 {/* New Attachments List */}
                 {resource.attachments?.map(att => (
-                  <div key={att.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 hover:border-indigo-200 transition-colors group">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="p-2 bg-white text-indigo-600 rounded-lg shadow-sm">
-                        <FileText size={16} />
+                  <div key={att.id} className="p-3 bg-white rounded-xl border border-slate-200 hover:border-indigo-300 transition-all group shadow-sm hover:shadow-md flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg shrink-0">
+                        <FileText size={18} />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-slate-900 text-sm truncate">{att.file_name}</p>
-                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-slate-900 text-sm truncate" title={att.file_name}>{att.file_name}</p>
+                        <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
                           <span>{att.file_size || 'Unknown'}</span>
                           <span>•</span>
-                          <span>{formatCount(att.download_count || 0)} downloads</span>
+                          <span>{formatCount(att.download_count || 0)} {t('article.downloads') || 'downloads'}</span>
                         </div>
                       </div>
                     </div>
                     <button
                       onClick={() => handleDownload(att.id)}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-700 text-xs font-bold shadow-sm hover:text-indigo-600 hover:border-indigo-200 transition-all"
+                      className="shrink-0 p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                      title={t('article.download')}
                     >
-                      <Download size={14} />
-                      {t('article.download')}
+                      <Download size={20} />
                     </button>
                   </div>
                 ))}
               </div>
             </div>
-          </div>
-        )}
-
-        {/* Mobile Attachments (Bottom) */}
-        <div className="xl:hidden mt-12 border-t border-slate-200 pt-8">
-          {isUnlocked && ((resource.attachments && resource.attachments.length > 0) || resource.file_url) && (
-            <div>
-              <h3 className="text-lg font-semibold text-slate-900 mb-4">{t('article.attachedResources')}</h3>
-              <div className="space-y-3">
-                {resource.attachments?.map(att => (
-                  <div key={att.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
-                    <span className="text-sm font-medium truncate">{att.file_name}</span>
-                    <button onClick={() => handleDownload(att.id)} className="p-2 bg-white rounded-lg border border-slate-200"><Download size={16} /></button>
-                  </div>
-                ))}
-              </div>
-            </div>
           )}
-        </div>
-
-        <div className="max-w-4xl mx-auto">
 
           {/* 点赞和评论区域 */}
           <div className="mt-16 border-t-2 border-slate-200 pt-12">
@@ -685,6 +699,15 @@ const ArticleView: React.FC = () => {
             username={user?.username}
             title={t('article.replyTo', { username: replyToComment?.username || '' })}
             placeholder={t('article.writeReply')}
+          />
+
+          {/* 私信弹窗 */}
+          <ChatModal
+            isOpen={showChatModal}
+            onClose={() => setShowChatModal(false)}
+            recipientId={resource.author_id}
+            recipientName={resource.author_username || 'Author'}
+            recipientAvatar={resource.author_avatar}
           />
         </div>
       </div>

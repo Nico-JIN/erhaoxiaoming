@@ -9,12 +9,14 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.security import get_current_admin, get_current_user, get_current_user_optional
 from backend.app.db.session import get_db
-from backend.app.models import Resource, ResourceStatus, User, ResourceAttachment
+from backend.app.models import Resource, ResourceStatus, User, ResourceAttachment, NotificationType
 from backend.app.schemas import ResourceCreate, ResourceListResponse, ResourceResponse, ResourceUpdate
 from backend.app.services.operations import log_operation
 from backend.app.services.points import deduct_points
 from backend.app.services.storage import storage
+from backend.app.services import notification_service
 from backend.app.utils.text import create_slug
+from pydantic import BaseModel
 
 
 router = APIRouter(prefix="/api/resources", tags=["Resources"])
@@ -80,6 +82,7 @@ async def get_hot_resources(limit: int = 6, db: Session = Depends(get_db)):
 @router.get("/{resource_id}", response_model=ResourceResponse)
 async def get_resource(
     resource_id: str,  # UUID
+    increment_views: bool = True,
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
@@ -89,8 +92,9 @@ async def get_resource(
     if not resource:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
 
-    resource.views += 1
-    db.commit()
+    if increment_views:
+        resource.views += 1
+        db.commit()
     
     # Check if user has purchased this resource or is admin
     if current_user and not resource.is_free and resource.points_required > 0:
@@ -386,6 +390,28 @@ async def delete_attachment(
     db.commit()
 
 
+class AttachmentUpdate(BaseModel):
+    file_name: str
+
+@router.put("/attachments/{attachment_id}", response_model=ResourceResponse)
+async def update_attachment(
+    attachment_id: int,
+    attachment_data: AttachmentUpdate,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Update a resource attachment."""
+    attachment = db.query(ResourceAttachment).filter(ResourceAttachment.id == attachment_id).first()
+    if not attachment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
+
+    attachment.file_name = attachment_data.file_name
+    db.commit()
+    
+    # Return the updated resource
+    return attachment.resource
+
+
 @router.get("/attachments/{attachment_id}/download")
 async def download_attachment(
     attachment_id: int,
@@ -448,6 +474,20 @@ async def download_attachment(
     resource.downloads += 1
     db.commit()
     
+    # Create notification for all admins
+    from backend.app.models import UserRole, NotificationType
+    admins = db.query(User).filter(User.role == UserRole.ADMIN).all()
+    for admin in admins:
+        if admin.id != current_user.id:
+            notification_service.create_notification(
+                db=db,
+                user_id=admin.id,
+                actor_id=current_user.id,
+                notification_type=NotificationType.DOWNLOAD,
+                resource_id=resource.id,
+                content=f"{current_user.username} 下载了资源附件《{resource.title}》"
+            )
+
     # Analytics... (omitted for brevity but should be added)
 
     if not attachment.file_url:
@@ -534,6 +574,20 @@ async def download_resource(
         user_agent=request.headers.get("user-agent", ""),
         user_id=current_user.id if current_user else None,
     )
+
+    # Create notification for all admins
+    from backend.app.models import UserRole
+    admins = db.query(User).filter(User.role == UserRole.ADMIN).all()
+    for admin in admins:
+        if admin.id != current_user.id:
+            notification_service.create_notification(
+                db=db,
+                user_id=admin.id,
+                actor_id=current_user.id,
+                notification_type=NotificationType.DOWNLOAD,
+                resource_id=resource_id,
+                content=f"{current_user.username} 下载了资源《{resource.title}》"
+            )
 
     if not resource.file_url:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")

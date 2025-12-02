@@ -54,6 +54,16 @@ class TransactionType(str, enum.Enum):
     ADMIN_ADJUST = "ADMIN_ADJUST"
 
 
+class NotificationType(str, enum.Enum):
+    """通知类型枚举"""
+    LIKE = "LIKE"  # 点赞
+    COMMENT = "COMMENT"  # 评论
+    REPLY = "REPLY"  # 回复
+    DOWNLOAD = "DOWNLOAD"  # 下载
+    VIEW = "VIEW"  # 阅读（可选）
+    MESSAGE = "MESSAGE"  # 私信
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -407,3 +417,42 @@ class ResourceAttachment(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     resource = relationship("Resource", back_populates="attachments")
+
+
+class Notification(Base):
+    """用户通知表"""
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(CHAR(32), ForeignKey("users.id", ondelete="CASCADE"), index=True)  # 接收通知的用户
+    actor_id = Column(CHAR(32), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)  # 触发动作的用户
+    
+    notification_type = Column(Enum(NotificationType), index=True)  # 通知类型
+    resource_id = Column(CHAR(32), ForeignKey("resources.id", ondelete="CASCADE"), nullable=True, index=True)  # 相关资源
+    
+    content = Column(Text)  # 通知内容文本
+    is_read = Column(Boolean, default=False, index=True)  # 是否已读
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    
+    # Relationships
+    user = relationship("User", foreign_keys=[user_id])  # 接收者
+    actor = relationship("User", foreign_keys=[actor_id])  # 触发者
+    resource = relationship("Resource")
+
+
+class Message(Base):
+    """私信表"""
+    __tablename__ = "messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sender_id = Column(CHAR(32), ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    receiver_id = Column(CHAR(32), ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    
+    content = Column(Text)
+    is_read = Column(Boolean, default=False, index=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    sender = relationship("User", foreign_keys=[sender_id])
+    receiver = relationship("User", foreign_keys=[receiver_id])

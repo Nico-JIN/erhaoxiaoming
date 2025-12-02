@@ -50,6 +50,19 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
       } else {
         // Login
         await login({ username, password });
+
+        // Check if user is admin and redirect
+        try {
+          const userService = (await import('../services/userService')).default;
+          const currentUser = await userService.getCurrentUser();
+          if (currentUser.role === 'ADMIN') {
+            window.location.href = '/admin';
+            return;
+          }
+        } catch (e) {
+          console.error('Failed to check user role', e);
+        }
+
         showToast('✅ 登录成功！', 'success');
       }
       // Wait a moment for toast to show before closing

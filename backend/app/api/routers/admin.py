@@ -31,7 +31,87 @@ from backend.app.schemas import (
 from backend.app.services.operations import log_operation
 
 
+
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
+
+
+# 中文化辅助函数
+def translate_action_to_chinese(action: str) -> str:
+    """将操作类型转换为中文"""
+    action_map = {
+        # 用户操作
+        "LOGIN": "登录",
+        "LOGOUT": "登出",
+        "REGISTER": "注册",
+        "USER_UPDATE": "更新用户信息",
+        "USER_DELETE": "删除用户",
+        "USER_BATCH_DELETE": "批量删除用户",
+        
+        # 资源操作
+        "RESOURCE_CREATE": "创建文章",
+        "RESOURCE_UPDATE": "更新文章",
+        "RESOURCE_DELETE": "删除文章",
+        "RESOURCE_BATCH_DELETE": "批量删除文章",
+        "RESOURCE_PUBLISH": "发布文章",
+        "RESOURCE_VIEW": "浏览文章",
+        "RESOURCE_DOWNLOAD": "下载资源",
+        "RESOURCE_LIKE": "点赞文章",
+        "RESOURCE_STATS_UPDATE": "更新文章统计",
+        
+        # 评论操作
+        "COMMENT_CREATE": "发表评论",
+        "COMMENT_DELETE": "删除评论",
+        
+        # 分类操作
+        "CATEGORY_CREATE": "创建分类",
+        "CATEGORY_UPDATE": "更新分类",
+        "CATEGORY_DELETE": "删除分类",
+        
+        # 充值操作
+        "RECHARGE_CREATE": "创建充值订单",
+        "RECHARGE_APPROVE": "批准充值",
+        "RECHARGE_REJECT": "拒绝充值",
+        
+        # 系统操作
+        "CONFIG_UPDATE": "更新系统配置",
+        "PAYMENT_QR_UPLOAD": "上传收款码",
+    }
+    return action_map.get(action, action)
+
+
+def translate_resource_type_to_chinese(resource_type: str) -> str:
+    """将资源类型转换为中文"""
+    type_map = {
+        "user": "用户",
+        "resource": "文章",
+        "comment": "评论",
+        "category": "分类",
+        "recharge": "充值",
+        "config": "配置",
+        "payment": "支付",
+    }
+    return type_map.get(resource_type, resource_type)
+
+
+def translate_page_path_to_chinese(page_path: str) -> str:
+    """将页面路径转换为中文描述"""
+    if page_path == "/":
+        return "首页"
+    elif page_path.startswith("/article/"):
+        return f"文章详情页 ({page_path})"
+    elif page_path.startswith("/category/"):
+        return f"分类页 ({page_path})"
+    elif page_path == "/admin":
+        return "后台管理"
+    elif page_path == "/editor":
+        return "编辑器"
+    elif page_path == "/login":
+        return "登录页"
+    elif page_path == "/recharge":
+        return "充值页"
+    else:
+        return page_path
+
 
 
 @router.get("/dashboard", response_model=DashboardStats)
@@ -101,7 +181,7 @@ async def get_dashboard_stats(
     }
 
 
-@router.get("/logs", response_model=List[OperationLogResponse])
+@router.get("/logs")
 async def get_operation_logs(
     skip: int = 0,
     limit: int = 100,
@@ -111,7 +191,7 @@ async def get_operation_logs(
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    """Return paginated operation logs."""
+    """Return paginated operation logs with Chinese localization."""
 
     query = db.query(OperationLog)
     if user_id:
@@ -120,7 +200,29 @@ async def get_operation_logs(
         query = query.filter(OperationLog.action == action)
     if resource_type:
         query = query.filter(OperationLog.resource_type == resource_type)
-    return query.order_by(OperationLog.created_at.desc()).offset(skip).limit(limit).all()
+    
+    logs = query.order_by(OperationLog.created_at.desc()).offset(skip).limit(limit).all()
+    
+    # 中文化日志数据
+    localized_logs = []
+    for log in logs:
+        log_dict = {
+            "id": log.id,
+            "user_id": log.user_id,
+            "username": log.user.username if log.user else "系统",
+            "action": translate_action_to_chinese(log.action),
+            "action_raw": log.action,  # 保留原始值以便筛选
+            "resource_type": translate_resource_type_to_chinese(log.resource_type),
+            "resource_type_raw": log.resource_type,  # 保留原始值以便筛选
+            "resource_id": log.resource_id,
+            "ip_address": log.ip_address,
+            "user_agent": log.user_agent,
+            "details": log.details,
+            "created_at": log.created_at.isoformat() if log.created_at else None,
+        }
+        localized_logs.append(log_dict)
+    
+    return localized_logs
 
 
 @router.get("/resources", response_model=List[ResourceListResponse])
@@ -401,7 +503,7 @@ async def get_visitor_logs(
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    """Get detailed visitor logs."""
+    """Get detailed visitor logs with Chinese localization."""
     from backend.app.models import VisitorAnalytics
     
     total = db.query(func.count(VisitorAnalytics.id)).scalar() or 0
@@ -420,9 +522,11 @@ async def get_visitor_logs(
             {
                 "id": log.id,
                 "page_path": log.page_path,
+                "page_path_cn": translate_page_path_to_chinese(log.page_path),  # 中文化页面路径
                 "ip_address": log.ip_address,
                 "user_agent": log.user_agent,
                 "user_id": log.user_id,
+                "username": log.user.username if log.user else "访客",
                 "session_id": log.session_id,
                 "referrer": log.referrer,
                 "created_at": log.created_at.isoformat() if log.created_at else None,

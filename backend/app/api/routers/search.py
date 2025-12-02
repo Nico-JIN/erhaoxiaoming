@@ -64,12 +64,21 @@ async def search_resources(
     
     # Format results
     results = []
+    from backend.app.services.storage import storage
+    
     for resource in resources:
+        thumbnail_url = resource.thumbnail_url
+        if thumbnail_url and not thumbnail_url.startswith("http"):
+            try:
+                thumbnail_url = storage.get_file_url(thumbnail_url)
+            except Exception:
+                pass
+
         results.append({
             "id": resource.id,
             "title": resource.title,
             "description": resource.description,
-            "thumbnail_url": resource.thumbnail_url,
+            "thumbnail_url": thumbnail_url,
             "category_name": resource.category_name,
             "category_slug": resource.category_slug,
             "author_username": resource.author_username,

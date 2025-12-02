@@ -165,8 +165,10 @@ class ResourceService {
     return response.data.map((item) => parseResourceDto(item));
   }
 
-  async getResource(resourceId: string | number): Promise<Resource> {
-    const response = await api.get<ResourceDto>(`/api/resources/${resourceId}`);
+  async getResource(resourceId: string | number, incrementViews: boolean = true): Promise<Resource> {
+    const response = await api.get<ResourceDto>(`/api/resources/${resourceId}`, {
+      params: { increment_views: incrementViews }
+    });
     return parseResourceDto(response.data);
   }
 
@@ -228,6 +230,11 @@ class ResourceService {
 
   async deleteAttachment(attachmentId: number): Promise<void> {
     await api.delete(`/api/resources/attachments/${attachmentId}`);
+  }
+
+  async updateAttachment(attachmentId: number, data: { file_name: string }): Promise<Resource> {
+    const response = await api.put<ResourceDto>(`/api/resources/attachments/${attachmentId}`, data);
+    return parseResourceDto(response.data);
   }
 
   async downloadAttachment(attachmentId: number): Promise<DownloadResourceResponse> {

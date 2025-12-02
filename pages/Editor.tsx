@@ -16,6 +16,11 @@ try {
     return html;
   };
 
+  // Ensure HTML is preserved for video tags
+  renderer.html = function (this: any, token: any) {
+    return token.text;
+  };
+
   marked.use({ renderer });
 } catch (error) {
   console.warn('Failed to configure marked renderer:', error);
@@ -103,6 +108,30 @@ Start writing your knowledge here.
     progress: number;
     status: 'uploading' | 'completed' | 'error';
   }>>([]);
+
+  // Attachment renaming state
+  const [editingAttachmentId, setEditingAttachmentId] = useState<number | null>(null);
+  const [editingAttachmentName, setEditingAttachmentName] = useState('');
+
+  const handleRenameAttachment = async (attachmentId: number) => {
+    if (!editingAttachmentName.trim()) {
+      setEditingAttachmentId(null);
+      return;
+    }
+
+    try {
+      const updatedResource = await resourceService.updateAttachment(attachmentId, {
+        file_name: editingAttachmentName.trim()
+      });
+      setCurrentResource(updatedResource);
+      showToast('Attachment renamed', 'success');
+    } catch (error) {
+      console.error('Failed to rename attachment', error);
+      showToast('Failed to rename attachment', 'error');
+    } finally {
+      setEditingAttachmentId(null);
+    }
+  };
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
@@ -829,7 +858,33 @@ ${after}`;
                   {currentResource.attachments.map(att => (
                     <div key={att.id} className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg text-xs text-slate-700 shrink-0 group">
                       <FileText size={12} className="text-indigo-500" />
-                      <span className="max-w-[100px] truncate">{att.file_name}</span>
+
+                      {editingAttachmentId === att.id ? (
+                        <input
+                          type="text"
+                          value={editingAttachmentName}
+                          onChange={(e) => setEditingAttachmentName(e.target.value)}
+                          onBlur={() => handleRenameAttachment(att.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleRenameAttachment(att.id);
+                            if (e.key === 'Escape') setEditingAttachmentId(null);
+                          }}
+                          autoFocus
+                          className="w-32 px-1 py-0.5 border border-indigo-300 rounded outline-none bg-white"
+                        />
+                      ) : (
+                        <span
+                          className="max-w-[100px] truncate cursor-pointer hover:text-indigo-600"
+                          onClick={() => {
+                            setEditingAttachmentId(att.id);
+                            setEditingAttachmentName(att.file_name);
+                          }}
+                          title="Click to rename"
+                        >
+                          {att.file_name}
+                        </span>
+                      )}
+
                       <button
                         onClick={() => handleDeleteAttachment(att.id)}
                         className="text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -870,10 +925,6 @@ ${after}`;
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Main Workspace */}
-      <div className="flex-1 flex overflow-hidden relative bg-white">
 
         {/* Preview Pane */}
         {showPreview && (

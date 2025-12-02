@@ -9,17 +9,20 @@ import ArticleView from './pages/ArticleView';
 import Pricing from './pages/Pricing';
 import AdminPanel from './pages/AdminPanel';
 import Resources from './pages/Resources';
+import Messages from './pages/Messages';
 import OAuthCallback from './pages/OAuthCallback';
 import OAuthSuccess from './pages/OAuthSuccess';
 import OAuthError from './pages/OAuthError';
 import PageTracker from './components/PageTracker';
-import { Search, Wallet, Globe, X } from 'lucide-react';
-import searchService, { SearchResult } from './services/searchService';
-import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { Language } from './i18n/translations';
+import NotificationDropdown from './components/NotificationDropdown';
+import notificationService from './services/notificationService';
+import { Search, Wallet, Globe, X, Bell } from 'lucide-react';
 
-type UserRole = 'USER' | 'VIP' | 'ADMIN';
+import { useLanguage, LanguageProvider } from './contexts/LanguageContext';
+import { useAuth, AuthProvider } from './contexts/AuthContext';
+import searchService, { SearchResult } from './services/searchService';
+import { UserRole } from './types';
+import { Language } from './i18n/translations';
 
 // --- User Navbar ---
 const Navbar: React.FC<{ onLoginClick: () => void }> = ({ onLoginClick }) => {
@@ -29,6 +32,27 @@ const Navbar: React.FC<{ onLoginClick: () => void }> = ({ onLoginClick }) => {
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+
+  // Notification State
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (user) {
+      const fetchUnread = async () => {
+        try {
+          const stats = await notificationService.getStats();
+          setUnreadCount(stats.total);
+        } catch (e) {
+          console.error(e);
+        }
+      };
+      fetchUnread();
+      // Poll every minute
+      const interval = setInterval(fetchUnread, 60000);
+      return () => clearInterval(interval);
+    }
+  }, [user]);
 
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -149,6 +173,22 @@ const Navbar: React.FC<{ onLoginClick: () => void }> = ({ onLoginClick }) => {
 
           {user ? (
             <div className="flex items-center gap-4">
+              {/* Notification Bell */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="p-2 text-slate-600 hover:bg-slate-100 rounded-full transition-colors relative"
+                >
+                  <Bell size={20} />
+                  {unreadCount > 0 && (
+                    <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+                  )}
+                </button>
+                {showNotifications && (
+                  <NotificationDropdown onClose={() => setShowNotifications(false)} />
+                )}
+              </div>
+
               {user.role === 'ADMIN' && (
                 <button onClick={() => navigate('/admin')} className="hidden md:flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-800 transition shadow-lg shadow-slate-200">
                   {t('nav.adminCreate')}
@@ -186,6 +226,15 @@ const Navbar: React.FC<{ onLoginClick: () => void }> = ({ onLoginClick }) => {
                       className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 text-slate-700"
                     >
                       个人信息
+                    </button>
+                    <button
+                      onClick={() => {
+                        navigate('/messages');
+                        setShowUserMenu(false);
+                      }}
+                      className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 text-slate-700"
+                    >
+                      我的私信
                     </button>
                     <button onClick={handleLogout} className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 text-red-600">
                       Logout
@@ -277,6 +326,14 @@ const AppContent: React.FC = () => {
           <Route path="/resources" element={<Resources />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/article/:id" element={<ArticleView />} />
+          <Route path="/resources" element={<Resources />} />
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/article/:id" element={<ArticleView />} />
+          <Route path="/messages" element={
+            <ProtectedRoute>
+              <Messages />
+            </ProtectedRoute>
+          } />
         </Route>
 
         {/* Admin Routes */}
