@@ -24,16 +24,27 @@ export interface NotificationStats {
 }
 
 const notificationService = {
-    getStats: async (): Promise<NotificationStats> => {
-        const response = await api.get<NotificationStats>('/api/notifications/stats');
+    getStats: async (unreadOnly: boolean = true): Promise<NotificationStats> => {
+        const response = await api.get<NotificationStats>('/api/notifications/stats', {
+            params: { unread_only: unreadOnly }
+        });
         return response.data;
     },
 
-    getNotifications: async (skip: number = 0, limit: number = 20): Promise<Notification[]> => {
+    getNotifications: async (skip: number = 0, limit: number = 20, type?: string): Promise<Notification[]> => {
+        const params: any = { skip, limit };
+        if (type) {
+            params.notification_type = type;
+        }
         const response = await api.get<Notification[]>('/api/notifications', {
-            params: { skip, limit }
+            params
         });
         return response.data;
+    },
+
+    getUnreadCount: async (): Promise<number> => {
+        const response = await api.get<{ count: number }>('/api/notifications/unread-count');
+        return response.data.count;
     },
 
     markAsRead: async (id: number): Promise<Notification> => {

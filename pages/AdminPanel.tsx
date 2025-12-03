@@ -63,6 +63,7 @@ const AdminPanel: React.FC = () => {
   const [transactions, setTransactions] = useState<PointTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<string | null>(null);
 
   // Sorting State
   const [sortField, setSortField] = useState<string>('created_at');
@@ -124,6 +125,7 @@ const AdminPanel: React.FC = () => {
   // Notification State
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notificationStats, setNotificationStats] = useState<NotificationStats | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const slugify = (value: string) =>
     value
@@ -204,10 +206,12 @@ const AdminPanel: React.FC = () => {
       }
 
       // Load notifications
-      const notifStats = await notificationService.getStats();
+      const notifStats = await notificationService.getStats(false);
       setNotificationStats(notifStats);
-      const notifList = await notificationService.getNotifications();
+      const notifList = await notificationService.getNotifications(0, 20, activeFilter || undefined);
       setNotifications(notifList);
+      const unread = await notificationService.getUnreadCount();
+      setUnreadCount(unread);
     } catch (error) {
       console.error('Failed to load admin data', error);
       setMessage(t('admin.loadError'));
@@ -756,7 +760,7 @@ const AdminPanel: React.FC = () => {
     }
   };
 
-  const SidebarItem = ({ id, icon: Icon, label }: { id: AdminTab; icon: any; label: string }) => (
+  const SidebarItem = ({ id, icon: Icon, label, badge }: { id: AdminTab; icon: any; label: string; badge?: number }) => (
     <button
       onClick={() => setActiveTab(id)}
       className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === id
@@ -765,7 +769,12 @@ const AdminPanel: React.FC = () => {
         }`}
     >
       <Icon size={18} className={activeTab === id ? 'text-indigo-600' : 'text-slate-400'} />
-      {label}
+      <span className="flex-1 text-left">{label}</span>
+      {badge !== undefined && badge > 0 && (
+        <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
     </button>
   );
 
@@ -776,10 +785,18 @@ const AdminPanel: React.FC = () => {
         <button
           onClick={async () => {
             await notificationService.markAllAsRead();
-            const list = await notificationService.getNotifications();
+            const list = await notificationService.getNotifications(0, 20, activeFilter || undefined);
             setNotifications(list);
-            const stats = await notificationService.getStats();
-            setNotificationStats(stats);
+            const fetchStats = async () => {
+              try {
+                // Fetch total stats (unread_only=false)
+                const stats = await notificationService.getStats(false);
+                setNotificationStats(stats);
+              } catch (e) {
+                console.error(e);
+              }
+            };
+            await fetchStats();
           }}
           className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors text-sm font-medium"
         >
@@ -788,25 +805,49 @@ const AdminPanel: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+        <div
+          onClick={() => {
+            const newFilter = activeFilter === 'LIKE' ? null : 'LIKE';
+            setActiveFilter(newFilter);
+            notificationService.getNotifications(0, 20, newFilter || undefined).then(setNotifications);
+          }}
+          className={`bg-white p-4 rounded-xl border transition-all cursor-pointer ${activeFilter === 'LIKE' ? 'border-pink-500 ring-2 ring-pink-100' : 'border-slate-100 hover:border-pink-200'}`}
+        >
           <div className="text-slate-500 text-sm mb-1">点赞</div>
           <div className="text-2xl font-bold text-pink-500">{notificationStats?.like || 0}</div>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+        <div
+          onClick={() => {
+            const newFilter = activeFilter === 'COMMENT' ? null : 'COMMENT';
+            setActiveFilter(newFilter);
+            notificationService.getNotifications(0, 20, newFilter || undefined).then(setNotifications);
+          }}
+          className={`bg-white p-4 rounded-xl border transition-all cursor-pointer ${activeFilter === 'COMMENT' ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-100 hover:border-blue-200'}`}
+        >
           <div className="text-slate-500 text-sm mb-1">评论</div>
           <div className="text-2xl font-bold text-blue-500">{notificationStats?.comment || 0}</div>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+        <div
+          onClick={() => {
+            const newFilter = activeFilter === 'DOWNLOAD' ? null : 'DOWNLOAD';
+            setActiveFilter(newFilter);
+            notificationService.getNotifications(0, 20, newFilter || undefined).then(setNotifications);
+          }}
+          className={`bg-white p-4 rounded-xl border transition-all cursor-pointer ${activeFilter === 'DOWNLOAD' ? 'border-green-500 ring-2 ring-green-100' : 'border-slate-100 hover:border-green-200'}`}
+        >
           <div className="text-slate-500 text-sm mb-1">下载</div>
           <div className="text-2xl font-bold text-green-500">{notificationStats?.download || 0}</div>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+        <div
+          onClick={() => {
+            const newFilter = activeFilter === 'MESSAGE' ? null : 'MESSAGE';
+            setActiveFilter(newFilter);
+            notificationService.getNotifications(0, 20, newFilter || undefined).then(setNotifications);
+          }}
+          className={`bg-white p-4 rounded-xl border transition-all cursor-pointer ${activeFilter === 'MESSAGE' ? 'border-indigo-500 ring-2 ring-indigo-100' : 'border-slate-100 hover:border-indigo-200'}`}
+        >
           <div className="text-slate-500 text-sm mb-1">私信</div>
           <div className="text-2xl font-bold text-indigo-500">{notificationStats?.message || 0}</div>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-          <div className="text-slate-500 text-sm mb-1">系统</div>
-          <div className="text-2xl font-bold text-purple-500">{notificationStats?.system || 0}</div>
         </div>
       </div>
 
@@ -818,15 +859,33 @@ const AdminPanel: React.FC = () => {
             notifications.map((notif) => (
               <div
                 key={notif.id}
-                onClick={() => {
+                onClick={async () => {
+                  // Mark as read
+                  if (!notif.is_read) {
+                    try {
+                      await notificationService.markAsRead(notif.id);
+                      setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, is_read: true } : n));
+                      setUnreadCount(prev => Math.max(0, prev - 1));
+                      // Update stats as well
+                      const stats = await notificationService.getStats(false);
+                      setNotificationStats(stats);
+                    } catch (e) {
+                      console.error("Failed to mark as read", e);
+                    }
+                  }
+
+                  // Navigate
                   if (notif.notification_type === 'MESSAGE' && notif.actor_id) {
                     navigate(`/messages?userId=${notif.actor_id}`);
                   } else if (notif.resource_id) {
                     navigate(`/article/${notif.resource_id}`);
                   }
                 }}
-                className={`p-4 hover:bg-slate-50 transition-colors flex gap-4 cursor-pointer ${!notif.is_read ? 'bg-indigo-50/30' : ''}`}
+                className={`p-4 hover:bg-slate-50 transition-colors flex gap-4 cursor-pointer relative ${!notif.is_read ? 'bg-slate-50' : ''}`}
               >
+                {!notif.is_read && (
+                  <div className="absolute left-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-red-500 rounded-full"></div>
+                )}
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${notif.notification_type === 'LIKE' ? 'bg-pink-100 text-pink-500' :
                   notif.notification_type === 'COMMENT' ? 'bg-blue-100 text-blue-500' :
                     notif.notification_type === 'DOWNLOAD' ? 'bg-green-100 text-green-500' :
@@ -843,36 +902,30 @@ const AdminPanel: React.FC = () => {
                   <div className="flex items-center justify-between mb-1">
                     <span className="font-medium text-slate-900">
                       {notif.actor_username || 'System'}
-                      <span className="font-normal text-slate-500 ml-2">
-                        {notif.notification_type === 'LIKE' && '点赞了你的文章'}
-                        {notif.notification_type === 'COMMENT' && '评论了你的文章'}
-                        {notif.notification_type === 'DOWNLOAD' && '下载了你的资源'}
-                        {notif.notification_type === 'VIEW' && '浏览了你的文章'}
-                        {notif.notification_type === 'MESSAGE' && '给你发送了私信'}
+                      <span className="text-slate-400 font-normal text-xs ml-2">
+                        {new Date(notif.created_at).toLocaleString()}
                       </span>
                     </span>
-                    <span className="text-xs text-slate-400">{new Date(notif.created_at).toLocaleString()}</span>
                   </div>
-                  <p className="text-slate-600 text-sm line-clamp-2">{notif.content}</p>
-                  {notif.resource_title && (
-                    <div className="mt-2 text-xs text-indigo-600 bg-indigo-50 inline-block px-2 py-1 rounded">
-                      {notif.resource_title}
-                    </div>
-                  )}
+
+                  {/* Content Design Update: Bold content, lighter context */}
+                  <div className="text-sm">
+                    {notif.notification_type === 'COMMENT' || notif.notification_type === 'MESSAGE' ? (
+                      <>
+                        <p className="font-bold text-slate-800 mb-0.5">{notif.content.split('：').pop() || notif.content}</p>
+                        <p className="text-xs text-slate-500">
+                          {notif.notification_type === 'COMMENT' && '评论了你的文章'}
+                          {notif.notification_type === 'MESSAGE' && '给你发送了私信'}
+                          {notif.resource_title && <span className="ml-1 text-indigo-500">《{notif.resource_title}》</span>}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-slate-600">
+                        {notif.content}
+                      </p>
+                    )}
+                  </div>
                 </div>
-                {!notif.is_read && (
-                  <button
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      await notificationService.markAsRead(notif.id);
-                      setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, is_read: true } : n));
-                      const stats = await notificationService.getStats();
-                      setNotificationStats(stats);
-                    }}
-                    className="w-2 h-2 bg-red-500 rounded-full mt-2"
-                    title="Mark as read"
-                  ></button>
-                )}
               </div>
             ))
           )}
@@ -1858,14 +1911,9 @@ const AdminPanel: React.FC = () => {
           <SidebarItem id="finance" icon={Wallet} label={t('admin.finance')} />
           <SidebarItem id="categories" icon={Layers} label={t('admin.categories')} />
           <div className="pt-3 mt-3 border-t border-slate-100">
-            <SidebarItem id="analytics" icon={BarChart} label="Analytics" />
+            <SidebarItem id="analytics" icon={BarChart} label={tabTitles.analytics} />
             <div className="relative">
-              <SidebarItem id="notifications" icon={Bell} label="消息通知" />
-              {notificationStats && notificationStats.total > 0 && (
-                <span className="absolute right-2 top-1/2 -translate-y-1/2 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                  {notificationStats.total}
-                </span>
-              )}
+              <SidebarItem id="notifications" icon={Bell} label={tabTitles.notifications} badge={unreadCount} />
             </div>
             <SidebarItem id="logs" icon={Activity} label={t('admin.logs')} />
           </div>

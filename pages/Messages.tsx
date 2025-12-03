@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import messageService, { Conversation, Message } from '../services/messageService';
+import userService from '../services/userService';
 import { Send, User as UserIcon } from 'lucide-react';
 
 const Messages: React.FC = () => {
@@ -36,6 +37,24 @@ const Messages: React.FC = () => {
                 const targetConv = data.find(c => c.peer_id === targetUserId);
                 if (targetConv) {
                     setActiveConversation(targetConv);
+                } else {
+                    // Fetch user info and create temporary conversation
+                    try {
+                        // Need to import userService
+                        const user = await userService.getPublicProfile(targetUserId);
+                        const newConv: Conversation = {
+                            peer_id: user.id,
+                            peer_username: user.username,
+                            peer_avatar: user.avatar_url || user.avatar,
+                            last_message: '',
+                            last_message_at: new Date().toISOString(),
+                            unread_count: 0
+                        };
+                        setConversations(prev => [newConv, ...prev]);
+                        setActiveConversation(newConv);
+                    } catch (e) {
+                        console.error('Failed to fetch user info', e);
+                    }
                 }
             }
         } catch (error) {

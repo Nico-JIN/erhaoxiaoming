@@ -1,6 +1,6 @@
 """通知管理 API"""
 
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -46,24 +46,29 @@ def translate_notification_type(ntype: NotificationType) -> str:
 
 @router.get("/stats")
 async def get_notification_stats(
+    unread_only: bool = True,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """获取未读通知统计"""
-    return notification_service.get_stats(db, current_user.id)
+    """获取通知统计"""
+    return notification_service.get_stats(db, current_user.id, unread_only)
 
 
 @router.get("/", response_model=List[NotificationResponse])
-async def get_notifications(
+async def list_notifications(
     skip: int = 0,
-    limit: int = 50,
-    unread_only: bool = False,
+    limit: int = 20,
+    notification_type: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """获取当前用户的通知列表"""
+    """获取通知列表"""
     notifications = notification_service.get_user_notifications(
-        db, current_user.id, skip, limit
+        db, 
+        current_user.id, 
+        skip, 
+        limit,
+        notification_type
     )
     
     result = []

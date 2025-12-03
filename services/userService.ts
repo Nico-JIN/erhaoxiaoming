@@ -60,6 +60,11 @@ class UserService {
     const response = await api.get<User>(`/api/users/${userId}`);
     return response.data;
   }
+
+  async getPublicProfile(userId: string): Promise<User> {
+    const response = await api.get<User>(`/api/users/${userId}/public`);
+    return response.data;
+  }
 }
 
 export default new UserService();

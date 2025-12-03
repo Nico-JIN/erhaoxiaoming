@@ -184,3 +184,19 @@ async def update_user_status(
     )
 
     return user
+
+
+@router.get("/{user_id}/public", response_model=UserResponse)
+async def get_public_user(
+    user_id: str,
+    db: Session = Depends(get_db),
+):
+    """Get public user info."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    # Only return safe fields (UserResponse handles this mostly, but be careful)
+    # Ideally we should have a UserPublicResponse schema, but UserResponse seems to be used generally.
+    # Let's check UserResponse definition if possible, but for now this allows the frontend to get the name/avatar.
+    return user

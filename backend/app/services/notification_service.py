@@ -27,18 +27,23 @@ class NotificationService:
         db.refresh(db_notification)
         return db_notification
 
-    def get_user_notifications(self, db: Session, user_id: str, skip: int = 0, limit: int = 20) -> List[Notification]:
-        notifications = db.query(Notification)\
-            .filter(Notification.user_id == user_id)\
-            .order_by(Notification.created_at.desc())\
+    def get_user_notifications(
+        self, 
+        db: Session, 
+        user_id: str, 
+        skip: int = 0, 
+        limit: int = 20,
+        notification_type: Optional[str] = None
+    ) -> List[Notification]:
+        query = db.query(Notification).filter(Notification.user_id == user_id)
+        
+        if notification_type:
+            query = query.filter(Notification.notification_type == notification_type)
+            
+        return query.order_by(Notification.created_at.desc())\
             .offset(skip)\
             .limit(limit)\
             .all()
-        
-        # Enrich with actor and resource details if needed (though relationships handle this)
-        # We can map to schema in the router or here. 
-        # For now, return ORM objects.
-        return notifications
 
     def get_unread_count(self, db: Session, user_id: str) -> int:
         return db.query(Notification)\

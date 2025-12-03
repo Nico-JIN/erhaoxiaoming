@@ -64,30 +64,26 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ onClose }) 
     };
 
     const handleNotificationClick = async (notification: Notification) => {
-        if (!notification.is_read) {
-            try {
+        try {
+            // Mark as read immediately
+            if (!notification.is_read) {
                 await notificationService.markAsRead(notification.id);
                 setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n));
-            } catch (error) {
-                console.error('Failed to mark as read', error);
             }
-        }
 
-        // Check if this is a private message notification
-        if (notification.notification_type === 'MESSAGE' || notification.content.includes('发送了私信')) {
-            if (notification.actor_username) {
-                setChatRecipient({
-                    id: notification.actor_id || '',
-                    name: notification.actor_username,
-                    avatar: notification.actor_avatar
-                });
-                setShowChatModal(true);
-                onClose();
-            }
-        } else if (notification.resource_id) {
-            // Regular notification - navigate to article
-            navigate(`/article/${notification.resource_id}`);
             onClose();
+
+            // Navigate based on type
+            if (notification.notification_type === 'MESSAGE' && notification.actor_id) {
+                navigate(`/messages?userId=${notification.actor_id}`);
+            } else if (notification.resource_id) {
+                navigate(`/article/${notification.resource_id}`);
+            } else {
+                // Default fallback to admin panel notifications tab
+                navigate('/admin?tab=notifications');
+            }
+        } catch (error) {
+            console.error('Failed to handle notification click', error);
         }
     };
 
