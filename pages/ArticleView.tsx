@@ -192,29 +192,20 @@ const ArticleView: React.FC = () => {
   const handleDownload = async (attachmentId?: number) => {
     if (!resource) return;
     try {
-      console.log('📥 Starting download...', { attachmentId, resourceId: resource.id });
-
       // Construct the API endpoint
       const apiEndpoint = attachmentId
         ? `/api/resources/attachments/${attachmentId}/download`
         : `/api/resources/${resource.id}/download`;
-
-      console.log('🔗 API Endpoint:', apiEndpoint);
 
       // Get the filename
       const filename = attachmentId
         ? (resource.attachments?.find(a => a.id === attachmentId)?.file_name || 'download')
         : getFilename(resource.file_url);
 
-      console.log('📄 Filename:', filename);
-
       // Get token for authorization
       const token = localStorage.getItem('access_token');
       const baseURL = api.defaults.baseURL || '';
       const fullUrl = `${baseURL}${apiEndpoint}`;
-
-      console.log('🌐 Full URL:', fullUrl);
-      console.log('🔑 Has token:', !!token);
 
       // Use fetch instead of axios for better blob handling
       const response = await fetch(fullUrl, {
@@ -225,11 +216,7 @@ const ArticleView: React.FC = () => {
         credentials: 'include',
       });
 
-      console.log('📡 Response status:', response.status);
-      console.log('📋 Response headers:', Object.fromEntries(response.headers.entries()));
-
       if (!response.ok) {
-        console.error('❌ Response not OK:', response.status, response.statusText);
         if (response.status === 401) {
           window.dispatchEvent(new CustomEvent('open-auth-modal'));
           return;
@@ -241,52 +228,53 @@ const ArticleView: React.FC = () => {
       }
 
       const contentType = response.headers.get('content-type') || '';
-      console.log('📦 Content-Type:', contentType);
+      let isExternalUrl = false;
+      let downloadUrl = '';
 
-      // Check if it's a JSON response (external URL case)
+      // Check if it's a JSON response that might be an external URL wrapper
       if (contentType.includes('application/json')) {
-        console.log('🔄 Handling as JSON (external URL)');
-        const data = await response.json();
-        console.log('📄 JSON data:', data);
-        if (data.download_url) {
-          // External URL - redirect download
-          const link = document.createElement('a');
-          link.href = data.download_url;
-          link.download = filename;
-          document.body.appendChild(link);
-          console.log('🔗 Clicking external link:', data.download_url);
-          link.click();
-          document.body.removeChild(link);
-          console.log('✅ External link download triggered');
-        }
-      } else {
-        console.log('📦 Handling as binary response');
-        // Binary response - create download from blob
-        const blob = await response.blob();
-        console.log('📦 Blob created:', { size: blob.size, type: blob.type });
+        try {
+          // Clone response to peek at body without consuming it
+          const clone = response.clone();
+          const data = await clone.json();
 
+          // Check if it matches the external URL wrapper structure
+          if (data && typeof data.download_url === 'string') {
+            isExternalUrl = true;
+            downloadUrl = data.download_url;
+          }
+        } catch (e) {
+          // Not valid JSON, proceed as binary file
+        }
+      }
+
+      if (isExternalUrl) {
+        // External URL - redirect download
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        // Binary response (or JSON file content) - create download from blob
+        const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
         link.download = filename;
         document.body.appendChild(link);
-        console.log('🖱️ Clicking download link');
         link.click();
-        console.log('✅ Download link clicked');
         document.body.removeChild(link);
 
         // Clean up
-        setTimeout(() => {
-          console.log('🧹 Cleaning up blob URL');
-          window.URL.revokeObjectURL(url);
-        }, 100);
+        setTimeout(() => window.URL.revokeObjectURL(url), 100);
       }
 
       // Update local count
       setResource(prev => prev ? { ...prev, downloads: (prev.downloads || 0) + 1 } : null);
-      console.log('✅ Download completed successfully');
     } catch (error: any) {
-      console.error('❌ Download failed:', error);
+      console.error('Download failed:', error);
 
       // Handle authentication/payment errors
       if (error?.response?.status === 401) {
