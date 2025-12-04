@@ -29,4 +29,4 @@ class Notification(NotificationBase):
     resource_title: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True

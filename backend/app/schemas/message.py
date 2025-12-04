@@ -19,7 +19,7 @@ class Message(MessageBase):
     sender_avatar: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class Conversation(BaseModel):
     peer_id: str

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.security import get_current_admin, get_current_user, get_current_user_optional
 from backend.app.db.session import get_db
-from backend.app.models import Resource, ResourceStatus, User, ResourceAttachment, NotificationType
+from backend.app.models import Resource, ResourceStatus, User, ResourceAttachment, NotificationType, UserRole
 from backend.app.schemas import ResourceCreate, ResourceListResponse, ResourceResponse, ResourceUpdate
 from backend.app.services.operations import log_operation
 from backend.app.services.points import deduct_points
