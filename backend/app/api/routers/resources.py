@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.security import get_current_admin, get_current_user, get_current_user_optional
 from backend.app.db.session import get_db
-from backend.app.models import Resource, ResourceStatus, User, ResourceAttachment, NotificationType, UserRole
-from backend.app.schemas import ResourceCreate, ResourceListResponse, ResourceResponse, ResourceUpdate
+from backend.app.models import Resource, ResourceStatus, User, ResourceAttachment, NotificationType, UserRole, Category
+from backend.app.schemas import ResourceCreate, ResourceListResponse, ResourceResponse, ResourceUpdate, CategorizedResourcesResponse
 from backend.app.services.operations import log_operation
 from backend.app.services.points import deduct_points
 from backend.app.services.storage import storage
@@ -77,6 +77,39 @@ async def get_hot_resources(limit: int = 6, db: Session = Depends(get_db)):
         .limit(limit)
     )
     return query.all()
+
+
+@router.get("/categorized", response_model=List[CategorizedResourcesResponse])
+async def get_categorized_resources(
+    limit: int = 4,
+    db: Session = Depends(get_db)
+):
+    """Return resources grouped by category."""
+    
+    categories = db.query(Category).filter(Category.is_active == True).order_by(Category.order).all()
+    
+    result = []
+    for category in categories:
+        resources = (
+            db.query(Resource)
+            .filter(
+                Resource.status == ResourceStatus.PUBLISHED,
+                Resource.category_id == category.id
+            )
+            .order_by(Resource.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        
+        if resources:
+            result.append({
+                "category_id": category.id,
+                "category_name": category.name,
+                "category_slug": category.slug,
+                "resources": resources
+            })
+            
+    return result
 
 
 @router.get("/{resource_id}", response_model=ResourceResponse)

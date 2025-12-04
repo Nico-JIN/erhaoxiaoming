@@ -222,6 +222,13 @@ class ResourceListResponse(BaseModel):
         from_attributes = True
 
 
+class CategorizedResourcesResponse(BaseModel):
+    category_id: int
+    category_name: str
+    category_slug: str
+    resources: List[ResourceListResponse]
+
+
 class PointTransactionBase(BaseModel):
     type: TransactionType
     amount: int

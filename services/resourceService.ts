@@ -50,6 +50,20 @@ export interface ResourceAttachmentDto {
   created_at: string;
 }
 
+export interface CategorizedResourcesDto {
+  category_id: number;
+  category_name: string;
+  category_slug: string;
+  resources: ResourceDto[];
+}
+
+export interface CategorizedResources {
+  category_id: number;
+  category_name: string;
+  category_slug: string;
+  resources: Resource[];
+}
+
 export interface Resource extends Omit<ResourceDto, 'tags' | 'tags_list'> {
   tags: string[];
   thumbnail_key?: string | null;
