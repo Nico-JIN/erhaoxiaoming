@@ -43,8 +43,9 @@ app.add_middleware(
 )
 
 # Add anti-bot middlewares
-app.add_middleware(RateLimitMiddleware, requests_per_minute=100, requests_per_second=10)
-app.add_middleware(IPBlocklistMiddleware)
+# DISABLED: Rate limiting middleware was causing 429 errors for legitimate users
+# app.add_middleware(RateLimitMiddleware, requests_per_minute=100, requests_per_second=10)
+# app.add_middleware(IPBlocklistMiddleware)
 
 # Add analytics tracking
 # Disabled: Using PageTracker component in frontend instead to avoid duplicate tracking

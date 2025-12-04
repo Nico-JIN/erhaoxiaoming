@@ -122,7 +122,7 @@ const ArticleView: React.FC = () => {
       }
     };
     loadResource();
-  }, [id, location.pathname]);
+  }, [id]);
 
   // Monitor scroll to highlight active heading
   useEffect(() => {
@@ -188,7 +188,16 @@ const ArticleView: React.FC = () => {
       }
 
       if (downloadUrl) {
-        window.open(downloadUrl, '_blank');
+        // Create a temporary anchor element to trigger download
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = attachmentId
+          ? (resource.attachments?.find(a => a.id === attachmentId)?.file_name || 'download')
+          : getFilename(resource.file_url);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
         // Update local count
         setResource(prev => prev ? { ...prev, downloads: (prev.downloads || 0) + 1 } : null);
       }
