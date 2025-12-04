@@ -412,11 +412,13 @@ async def update_attachment(
     return attachment.resource
 
 
+from backend.app.core.security import get_current_admin, get_current_user, get_current_user_optional, get_current_user_for_download
+
 @router.get("/attachments/{attachment_id}/download")
 async def download_attachment(
     attachment_id: int,
     request: Request,
-    current_user: Optional[User] = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_for_download),
     db: Session = Depends(get_db),
 ):
     """Download a specific attachment."""
@@ -527,7 +529,7 @@ async def download_attachment(
 async def download_resource(
     resource_id: str,
     request: Request,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user_for_download),
     db: Session = Depends(get_db),
 ):
     """Download a resource file."""

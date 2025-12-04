@@ -191,103 +191,46 @@ const ArticleView: React.FC = () => {
 
   const handleDownload = async (attachmentId?: number) => {
     if (!resource) return;
+
+    // Pre-check requirements
+    if (resource.points_required > 0) {
+      if (!user) {
+        window.dispatchEvent(new CustomEvent('open-auth-modal'));
+        return;
+      }
+      if (user.points < resource.points_required && !resource.is_purchased_by_user) {
+        setShowPaymentModal(true);
+        return;
+      }
+    }
+
     try {
       // Construct the API endpoint
       const apiEndpoint = attachmentId
         ? `/api/resources/attachments/${attachmentId}/download`
         : `/api/resources/${resource.id}/download`;
 
-      // Get the filename
-      const filename = attachmentId
-        ? (resource.attachments?.find(a => a.id === attachmentId)?.file_name || 'download')
-        : getFilename(resource.file_url);
-
       // Get token for authorization
       const token = localStorage.getItem('access_token');
       const baseURL = api.defaults.baseURL || '';
-      const fullUrl = `${baseURL}${apiEndpoint}`;
 
-      // Use fetch instead of axios for better blob handling
-      const response = await fetch(fullUrl, {
-        method: 'GET',
-        headers: {
-          'Authorization': token ? `Bearer ${token}` : '',
-        },
-        credentials: 'include',
-      });
+      // Construct URL with token query param
+      // Note: Backend supports ?token=xxx for direct downloads
+      const downloadUrl = `${baseURL}${apiEndpoint}?token=${token || ''}`;
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          window.dispatchEvent(new CustomEvent('open-auth-modal'));
-          return;
-        } else if (response.status === 402) {
-          setShowPaymentModal(true);
-          return;
-        }
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
+      // Trigger direct browser download
+      // This allows the browser to handle the stream directly, avoiding memory buffering issues with large files
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
 
-      const contentType = response.headers.get('content-type') || '';
-      let isExternalUrl = false;
-      let downloadUrl = '';
-
-      // Check if it's a JSON response that might be an external URL wrapper
-      if (contentType.includes('application/json')) {
-        try {
-          // Clone response to peek at body without consuming it
-          const clone = response.clone();
-          const data = await clone.json();
-
-          // Check if it matches the external URL wrapper structure
-          if (data && typeof data.download_url === 'string') {
-            isExternalUrl = true;
-            downloadUrl = data.download_url;
-          }
-        } catch (e) {
-          // Not valid JSON, proceed as binary file
-        }
-      }
-
-      if (isExternalUrl) {
-        // External URL - redirect download
-        const link = document.createElement('a');
-        link.href = downloadUrl;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      } else {
-        // Binary response (or JSON file content) - create download from blob
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-
-        // Clean up
-        setTimeout(() => window.URL.revokeObjectURL(url), 100);
-      }
-
-      // Update local count
+      // Update local count optimistically
       setResource(prev => prev ? { ...prev, downloads: (prev.downloads || 0) + 1 } : null);
     } catch (error: any) {
-      console.error('Download failed:', error);
-
-      // Handle authentication/payment errors
-      if (error?.response?.status === 401) {
-        window.dispatchEvent(new CustomEvent('open-auth-modal'));
-      } else if (error?.response?.status === 402) {
-        setShowPaymentModal(true);
-      } else if (resource.points_required > 0 && !user) {
-        alert(t('auth.loginRequired'));
-      } else if (resource.points_required > 0 && user && user.points < resource.points_required) {
-        setShowPaymentModal(true);
-      } else {
-        alert('下载失败，请重试');
-      }
+      console.error('Download trigger failed:', error);
+      alert('无法启动下载，请重试');
     }
   };
 
