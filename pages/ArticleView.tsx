@@ -202,18 +202,36 @@ const ArticleView: React.FC = () => {
         ? (resource.attachments?.find(a => a.id === attachmentId)?.file_name || 'download')
         : getFilename(resource.file_url);
 
-      // Fetch the file as a blob (backend will stream it)
-      const response = await api.get(apiEndpoint, {
-        responseType: 'blob',
+      // Get token for authorization
+      const token = localStorage.getItem('access_token');
+      const baseURL = api.defaults.baseURL || '';
+      const fullUrl = `${baseURL}${apiEndpoint}`;
+
+      // Use fetch instead of axios for better blob handling
+      const response = await fetch(fullUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': token ? `Bearer ${token}` : '',
+        },
+        credentials: 'include',
       });
 
-      // Check if it's a JSON response (external URL case)
-      const contentType = response.headers['content-type'] || '';
-      if (contentType.includes('application/json')) {
-        // Parse JSON from blob
-        const text = await response.data.text();
-        const data = JSON.parse(text);
+      if (!response.ok) {
+        if (response.status === 401) {
+          window.dispatchEvent(new CustomEvent('open-auth-modal'));
+          return;
+        } else if (response.status === 402) {
+          setShowPaymentModal(true);
+          return;
+        }
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
 
+      const contentType = response.headers.get('content-type') || '';
+
+      // Check if it's a JSON response (external URL case)
+      if (contentType.includes('application/json')) {
+        const data = await response.json();
         if (data.download_url) {
           // External URL - redirect download
           const link = document.createElement('a');
@@ -225,7 +243,7 @@ const ArticleView: React.FC = () => {
         }
       } else {
         // Binary response - create download from blob
-        const blob = response.data;
+        const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -233,7 +251,9 @@ const ArticleView: React.FC = () => {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
+
+        // Clean up
+        setTimeout(() => window.URL.revokeObjectURL(url), 100);
       }
 
       // Update local count
