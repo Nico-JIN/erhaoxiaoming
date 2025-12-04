@@ -89,6 +89,8 @@ const ArticleView: React.FC = () => {
   const viewCountedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
+    let isCleanedUp = false;
+
     const loadResource = async () => {
       if (!id) return;
       try {
@@ -100,28 +102,40 @@ const ArticleView: React.FC = () => {
 
         const data = await resourceService.getResource(id, shouldIncrement);
 
-        if (shouldIncrement) {
-          viewCountedRef.current.add(id);
+        // Only update state and mark as counted if not cleaned up
+        if (!isCleanedUp) {
+          if (shouldIncrement) {
+            viewCountedRef.current.add(id);
+          }
+
+          setResource(data);
+          setIsUnlocked(data.is_free || data.points_required === 0 || data.is_purchased_by_user === true);
+
+          setLikeCount(data.like_count || 0);
+          setIsLiked(data.is_liked_by_user || false);
+
+          const commentsData = await interactionsService.getComments(id);
+          setComments(commentsData);
         }
 
-        setResource(data);
-        setIsUnlocked(data.is_free || data.points_required === 0 || data.is_purchased_by_user === true);
-
-        setLikeCount(data.like_count || 0);
-        setIsLiked(data.is_liked_by_user || false);
-
-        const commentsData = await interactionsService.getComments(id);
-        setComments(commentsData);
-
-
       } catch (err) {
-        console.error('Failed to load resource', err);
-        setError('Article not found or unavailable.');
+        if (!isCleanedUp) {
+          console.error('Failed to load resource', err);
+          setError('Article not found or unavailable.');
+        }
       } finally {
-        setLoading(false);
+        if (!isCleanedUp) {
+          setLoading(false);
+        }
       }
     };
+
     loadResource();
+
+    // Cleanup function to handle StrictMode double-invocation
+    return () => {
+      isCleanedUp = true;
+    };
   }, [id]);
 
   // Monitor scroll to highlight active heading
@@ -178,37 +192,66 @@ const ArticleView: React.FC = () => {
   const handleDownload = async (attachmentId?: number) => {
     if (!resource) return;
     try {
-      let downloadUrl;
-      if (attachmentId) {
-        const response = await resourceService.downloadAttachment(attachmentId);
-        downloadUrl = response.download_url;
-      } else {
-        const response = await api.get(`/api/resources/${resource.id}/download`);
-        downloadUrl = response.data.download_url;
-      }
+      // Construct the API endpoint
+      const apiEndpoint = attachmentId
+        ? `/api/resources/attachments/${attachmentId}/download`
+        : `/api/resources/${resource.id}/download`;
 
-      if (downloadUrl) {
-        // Create a temporary anchor element to trigger download
+      // Get the filename
+      const filename = attachmentId
+        ? (resource.attachments?.find(a => a.id === attachmentId)?.file_name || 'download')
+        : getFilename(resource.file_url);
+
+      // Fetch the file as a blob (backend will stream it)
+      const response = await api.get(apiEndpoint, {
+        responseType: 'blob',
+      });
+
+      // Check if it's a JSON response (external URL case)
+      const contentType = response.headers['content-type'] || '';
+      if (contentType.includes('application/json')) {
+        // Parse JSON from blob
+        const text = await response.data.text();
+        const data = JSON.parse(text);
+
+        if (data.download_url) {
+          // External URL - redirect download
+          const link = document.createElement('a');
+          link.href = data.download_url;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+      } else {
+        // Binary response - create download from blob
+        const blob = response.data;
+        const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.href = downloadUrl;
-        link.download = attachmentId
-          ? (resource.attachments?.find(a => a.id === attachmentId)?.file_name || 'download')
-          : getFilename(resource.file_url);
+        link.href = url;
+        link.download = filename;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-
-        // Update local count
-        setResource(prev => prev ? { ...prev, downloads: (prev.downloads || 0) + 1 } : null);
+        window.URL.revokeObjectURL(url);
       }
-    } catch (error) {
+
+      // Update local count
+      setResource(prev => prev ? { ...prev, downloads: (prev.downloads || 0) + 1 } : null);
+    } catch (error: any) {
       console.error('Download failed:', error);
-      // If 401/402, show payment modal or login
-      if (resource.points_required > 0 && !user) {
-        // Trigger login or show message
+
+      // Handle authentication/payment errors
+      if (error?.response?.status === 401) {
+        window.dispatchEvent(new CustomEvent('open-auth-modal'));
+      } else if (error?.response?.status === 402) {
+        setShowPaymentModal(true);
+      } else if (resource.points_required > 0 && !user) {
         alert(t('auth.loginRequired'));
       } else if (resource.points_required > 0 && user && user.points < resource.points_required) {
         setShowPaymentModal(true);
+      } else {
+        alert('下载失败，请重试');
       }
     }
   };

@@ -494,20 +494,33 @@ async def download_attachment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
 
     try:
+        # Check if external URL
         if attachment.file_url.startswith("http"):
-            download_url = attachment.file_url
+            # External URL - return JSON for frontend to handle
+            return {
+                "download_url": attachment.file_url,
+                "balance": current_user.points,
+                "downloads": attachment.download_count,
+            }
         else:
-            download_url = storage.get_file_url(attachment.file_url, expires=3600)
-        
-        return {
-            "download_url": download_url,
-            "balance": current_user.points,
-            "downloads": attachment.download_count,
-        }
+            # MinIO file - stream through backend proxy
+            from fastapi.responses import StreamingResponse
+            
+            content_type, file_stream = storage.stream_file(attachment.file_url)
+            
+            return StreamingResponse(
+                file_stream,
+                media_type=content_type or "application/octet-stream",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{attachment.file_name}"',
+                    "X-User-Balance": str(current_user.points),
+                    "X-Download-Count": str(attachment.download_count),
+                }
+            )
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error generating download URL: {exc}",
+            detail=f"Error downloading file: {exc}",
         ) from exc
 
 @router.get("/{resource_id}/download")
@@ -593,21 +606,32 @@ async def download_resource(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
 
     try:
-        # Generate download URL
+        # Check if external URL
         if resource.file_url.startswith("http"):
-            # External URL, use as-is
-            download_url = resource.file_url
+            # External URL - return JSON for frontend to handle redirect
+            return {
+                "download_url": resource.file_url,
+                "balance": current_user.points,
+                "downloads": resource.downloads,
+            }
         else:
-            # MinIO object, generate presigned URL
-            download_url = storage.get_file_url(resource.file_url, expires=3600)
-        
-        return {
-            "download_url": download_url,
-            "balance": current_user.points,
-            "downloads": resource.downloads,
-        }
+            # MinIO file - stream through backend proxy
+            from fastapi.responses import StreamingResponse
+            
+            content_type, file_stream = storage.stream_file(resource.file_url)
+            filename = resource.file_url.split('/')[-1]
+            
+            return StreamingResponse(
+                file_stream,
+                media_type=content_type or "application/octet-stream",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{filename}"',
+                    "X-User-Balance": str(current_user.points),
+                    "X-Download-Count": str(resource.downloads),
+                }
+            )
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error generating download URL: {exc}",
+            detail=f"Error downloading file: {exc}",
         ) from exc
