@@ -193,11 +193,12 @@ const ArticleView: React.FC = () => {
     if (!resource) return;
 
     // Pre-check requirements
+    if (!user) {
+      window.dispatchEvent(new CustomEvent('open-auth-modal'));
+      return;
+    }
+
     if (resource.points_required > 0) {
-      if (!user) {
-        window.dispatchEvent(new CustomEvent('open-auth-modal'));
-        return;
-      }
       if (user.points < resource.points_required && !resource.is_purchased_by_user) {
         setShowPaymentModal(true);
         return;
