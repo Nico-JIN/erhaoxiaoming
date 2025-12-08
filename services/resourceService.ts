@@ -179,6 +179,16 @@ class ResourceService {
     return response.data.map((item) => parseResourceDto(item));
   }
 
+  async getCategorizedResources(limit = 4): Promise<CategorizedResources[]> {
+    const response = await api.get<CategorizedResourcesDto[]>('/api/resources/categorized', {
+      params: { limit },
+    });
+    return response.data.map((cat) => ({
+      ...cat,
+      resources: cat.resources.map((item) => parseResourceDto(item)),
+    }));
+  }
+
   async getResource(resourceId: string | number, incrementViews: boolean = true): Promise<Resource> {
     const response = await api.get<ResourceDto>(`/api/resources/${resourceId}`, {
       params: { increment_views: incrementViews }

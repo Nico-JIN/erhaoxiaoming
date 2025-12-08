@@ -26,7 +26,7 @@ import {
   Info
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
-import resourceService, { Resource } from '../services/resourceService';
+import resourceService, { Resource, CategorizedResources } from '../services/resourceService';
 import dailyInsightService, { DailyInsightSnapshot, LOCALE_BY_LANGUAGE, getFallbackDailySnapshot } from '../services/dailyInsightService';
 
 type ContentType = 'cover' | 'intro' | 'day' | 'blank';
@@ -144,6 +144,7 @@ const Home: React.FC = () => {
 
   // Data State
   const [hotResources, setHotResources] = useState<Resource[]>([]);
+  const [categorizedResources, setCategorizedResources] = useState<CategorizedResources[]>([]);
   const [isHotLoading, setHotLoading] = useState(true);
   const [monthlyInsights, setMonthlyInsights] = useState<DailyInsightSnapshot[]>([]);
 
@@ -230,6 +231,9 @@ const Home: React.FC = () => {
         setHotLoading(true);
         const data = await resourceService.getHotResources();
         setHotResources(data);
+        // Load categorized resources
+        const categorizedData = await resourceService.getCategorizedResources(4);
+        setCategorizedResources(categorizedData);
       } catch (error) {
         console.error('Failed to load hot resources', error);
       } finally {
@@ -515,79 +519,86 @@ const Home: React.FC = () => {
           </div>
         </div>
 
-        {/* Trending Section */}
-        <div className="max-w-[1400px] w-full mx-auto px-6 relative z-10 mt-12">
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-indigo-600 rounded-lg text-white shadow-lg shadow-indigo-200"><TrendingUp size={20} /></div>
-              <h2 className="text-2xl font-bold text-slate-900">{t('home.trendingTitle')}</h2>
-            </div>
-            <button onClick={() => navigate('/resources')} className="text-sm font-bold text-slate-500 hover:text-indigo-600 flex items-center gap-1 transition-colors">
-              {t('home.viewAll')} <ChevronRight size={16} />
-            </button>
-          </div>
-
-          <div className="grid md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {hotResources.map((item) => (
-              <div
-                key={item.id}
-                className="group bg-white rounded-xl p-2 border border-slate-100 hover:border-indigo-100 hover:shadow-lg transition-all duration-300 cursor-pointer"
-                onClick={() => navigate(`/article/${item.id}`)}
-              >
-                <div className="bg-slate-100 aspect-[16/10] rounded-lg relative overflow-hidden">
-                  <img
-                    src={item.thumbnail_url || `https://picsum.photos/seed/${item.id}/600/400`}
-                    alt={item.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                  />
-                  <div className="absolute top-3 left-3">
-                    <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm ${CATEGORY_TAG_STYLES[item.category_slug || ''] || 'bg-white/90 text-slate-800'}`}>
-                      {item.category_name || 'General'}
-                    </span>
+        {/* Categorized Hot Knowledge Sections */}
+        <div className="max-w-[1400px] w-full mx-auto px-6 relative z-10 mt-12 space-y-12">
+          {categorizedResources.map((category) => (
+            <div key={category.category_id}>
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg text-white shadow-lg ${CATEGORY_TAG_STYLES[category.category_slug] || 'bg-indigo-600 shadow-indigo-200'}`}>
+                    <TrendingUp size={20} />
                   </div>
-                  {/* 付费文章标识 */}
-                  {!item.is_free && item.points_required > 0 && (
-                    <div className="absolute top-3 right-3">
-                      <div className="bg-gradient-to-br from-amber-500 to-orange-600 text-white px-2.5 py-1 rounded-lg text-[10px] font-black shadow-lg flex items-center gap-1 backdrop-blur-sm border border-white/20">
-                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
-                        </svg>
-                        {item.points_required}
-                      </div>
-                    </div>
-                  )}
+                  <h2 className="text-2xl font-bold text-slate-900">{category.category_name}</h2>
                 </div>
-                <div className="p-3">
-                  <h3 className="font-bold text-slate-900 text-sm mb-2 line-clamp-2 group-hover:text-indigo-600 transition-colors">
-                    {item.title}
-                  </h3>
-                  <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-50">
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-5 h-5 rounded-full bg-slate-200 overflow-hidden">
-                        <img
-                          src={item.author_avatar || `https://ui-avatars.com/api/?name=${item.author_username}&background=random`}
-                          alt=""
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <span className="text-xs font-medium text-slate-500">{item.author_username}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {/* 阅读量 */}
-                      <div className="flex items-center gap-1 text-xs text-slate-400">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
-                        <span className="font-medium">{item.views || 0}</span>
-                      </div>
-                      <span className="text-xs text-slate-400">{new Date(item.created_at).toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                </div>
+                <button onClick={() => navigate(`/resources?category=${category.category_id}`)} className="text-sm font-bold text-slate-500 hover:text-indigo-600 flex items-center gap-1 transition-colors">
+                  {t('home.viewAll')} <ChevronRight size={16} />
+                </button>
               </div>
-            ))}
-          </div>
+
+              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {category.resources.map((item) => (
+                  <div
+                    key={item.id}
+                    className="group bg-white rounded-xl p-2 border border-slate-100 hover:border-indigo-100 hover:shadow-lg transition-all duration-300 cursor-pointer"
+                    onClick={() => navigate(`/article/${item.id}`)}
+                  >
+                    <div className="bg-slate-100 aspect-[16/10] rounded-lg relative overflow-hidden">
+                      <img
+                        src={item.thumbnail_url || `https://picsum.photos/seed/${item.id}/600/400`}
+                        alt={item.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                      />
+                      {/* 付费文章标识 */}
+                      {!item.is_free && item.points_required > 0 && (
+                        <div className="absolute top-3 right-3">
+                          <div className="bg-gradient-to-br from-amber-500 to-orange-600 text-white px-2.5 py-1 rounded-lg text-[10px] font-black shadow-lg flex items-center gap-1 backdrop-blur-sm border border-white/20">
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+                            </svg>
+                            {item.points_required}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-3">
+                      <h3 className="font-bold text-slate-900 text-sm mb-2 line-clamp-2 group-hover:text-indigo-600 transition-colors">
+                        {item.title}
+                      </h3>
+                      <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-50">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-5 h-5 rounded-full bg-slate-200 overflow-hidden">
+                            <img
+                              src={item.author_avatar || `https://ui-avatars.com/api/?name=${item.author_username}&background=random`}
+                              alt=""
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <span className="text-xs font-medium text-slate-500">{item.author_username}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-1 text-xs text-slate-400">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                            <span className="font-medium">{item.views || 0}</span>
+                          </div>
+                          <span className="text-xs text-slate-400">{new Date(item.created_at).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          {/* Fallback if no categories have articles */}
+          {categorizedResources.length === 0 && !isHotLoading && (
+            <div className="text-center py-12 text-slate-400">
+              <p>{t('home.noArticles') || '暂无文章'}</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
