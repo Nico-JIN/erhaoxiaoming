@@ -34,6 +34,7 @@ class UploadService {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      timeout: 1800000, // 30 minutes for large uploads
       onUploadProgress: options?.onProgress,
     });
 
@@ -53,6 +54,7 @@ class UploadService {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      timeout: 1800000, // 30 minutes for large uploads
       onUploadProgress: options?.onProgress,
     });
 
@@ -88,6 +90,7 @@ class UploadService {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      timeout: 1800000, // 30 minutes for large uploads
       onUploadProgress: options?.onProgress,
     });
 

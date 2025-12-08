@@ -224,6 +224,7 @@ class ResourceService {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      timeout: 1800000, // 30 minutes for large uploads
       onUploadProgress: (progressEvent) => {
         if (onProgress && progressEvent.total) {
           const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
@@ -242,6 +243,7 @@ class ResourceService {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      timeout: 1800000, // 30 minutes for large uploads
       onUploadProgress: (progressEvent) => {
         if (onProgress && progressEvent.total) {
           const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
