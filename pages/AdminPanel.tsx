@@ -1259,7 +1259,7 @@ const AdminPanel: React.FC = () => {
                     {new Date(log.created_at).toLocaleString()}
                   </td>
                   <td className="px-6 py-3 text-slate-600 font-medium">
-                    {log.user_id ? `#${log.user_id}` : '—'}
+                    {log.username || '系统'}
                   </td>
                   <td className="px-6 py-3 text-slate-500 uppercase tracking-wide text-xs">
                     {log.action}

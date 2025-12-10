@@ -35,6 +35,7 @@ export interface AdminResourceFilters {
 export interface OperationLog {
   id: number;
   user_id?: number;
+  username?: string;
   action: string;
   resource_type: string;
   resource_id?: string;

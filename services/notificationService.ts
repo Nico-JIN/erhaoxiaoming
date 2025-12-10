@@ -53,7 +53,7 @@ const notificationService = {
     },
 
     markAllAsRead: async (): Promise<{ count: number }> => {
-        const response = await api.put<{ count: number }>('/api/notifications/read-all');
+        const response = await api.put<{ count: number }>('/api/notifications/mark-all-read');
         return response.data;
     }
 };
