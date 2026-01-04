@@ -17,11 +17,18 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   const [password, setPassword] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [phoneError, setPhoneError] = useState('');
   const [fullName, setFullName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // Validate Chinese phone number (11 digits, starts with 1)
+  const validatePhone = (phoneNumber: string): boolean => {
+    const phoneRegex = /^1[3-9]\d{9}$/;
+    return phoneRegex.test(phoneNumber);
+  };
 
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
@@ -37,6 +44,19 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
 
     try {
       if (isRegister) {
+        // Validate phone number before submitting
+        if (!phone) {
+          setPhoneError('手机号不能为空');
+          setLoading(false);
+          return;
+        }
+        if (!validatePhone(phone)) {
+          setPhoneError('请输入有效的11位中国手机号');
+          setLoading(false);
+          return;
+        }
+        setPhoneError('');
+
         // Register
         await register({
           username,
@@ -199,11 +219,23 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                   <Smartphone className="absolute left-3 top-3 text-gray-400" size={18} />
                   <input
                     type="tel"
-                    placeholder={t('auth.phone') || "Phone (Optional)"}
+                    placeholder={t('auth.phone') || "手机号 (必填)"}
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '').slice(0, 11);
+                      setPhone(value);
+                      if (value && !validatePhone(value) && value.length === 11) {
+                        setPhoneError('请输入有效的11位中国手机号');
+                      } else {
+                        setPhoneError('');
+                      }
+                    }}
+                    required
+                    className={`w-full pl-10 pr-4 py-3 rounded-xl border ${phoneError ? 'border-red-400 focus:border-red-500 focus:ring-red-200' : 'border-gray-200 focus:border-indigo-500 focus:ring-indigo-200'} focus:ring-2 outline-none transition-all`}
                   />
+                  {phoneError && (
+                    <p className="text-xs text-red-500 mt-1">{phoneError}</p>
+                  )}
                 </div>
               </>
             )}

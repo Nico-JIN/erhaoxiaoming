@@ -13,11 +13,21 @@ def get_proxy_client(timeout: float = 30.0) -> httpx.AsyncClient:
     """Create an httpx client with SOCKS5 proxy support."""
     try:
         from httpx_socks import AsyncProxyTransport
+        print(f"[OAuth] httpx_socks loaded successfully, creating transport for {PROXY_URL}")
         transport = AsyncProxyTransport.from_url(PROXY_URL)
-        return httpx.AsyncClient(transport=transport, timeout=timeout)
-    except ImportError:
+        print(f"[OAuth] Transport created: {type(transport).__name__}")
+        client = httpx.AsyncClient(transport=transport, timeout=timeout)
+        print(f"[OAuth] AsyncClient created with SOCKS5 proxy")
+        return client
+    except ImportError as e:
         # Fallback to direct connection if httpx_socks is not installed
-        print("[OAuth] Warning: httpx_socks not installed, using direct connection")
+        print(f"[OAuth] ERROR: httpx_socks not installed! Error: {e}")
+        print("[OAuth] Please run: pip install httpx-socks[asyncio]")
+        return httpx.AsyncClient(timeout=timeout)
+    except Exception as e:
+        print(f"[OAuth] ERROR creating proxy client: {e}")
+        import traceback
+        traceback.print_exc()
         return httpx.AsyncClient(timeout=timeout)
 
 

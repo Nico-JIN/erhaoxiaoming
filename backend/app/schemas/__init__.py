@@ -24,7 +24,7 @@ class UserBase(BaseModel):
 
 class UserCreate(BaseModel):
     email: Optional[EmailStr] = None
-    phone: Optional[str] = None
+    phone: str = Field(..., min_length=11, max_length=11, pattern=r'^1[3-9]\d{9}$', description="Chinese mobile phone number (required, 11 digits)")
     username: str
     password: Optional[str] = Field(
         None,
