@@ -6,6 +6,20 @@ from backend.app.core.config import get_settings
 
 settings = get_settings()
 
+# SOCKS5 proxy for accessing Google/GitHub from China
+PROXY_URL = "socks5://127.0.0.1:10808"
+
+def get_proxy_client(timeout: float = 30.0) -> httpx.AsyncClient:
+    """Create an httpx client with SOCKS5 proxy support."""
+    try:
+        from httpx_socks import AsyncProxyTransport
+        transport = AsyncProxyTransport.from_url(PROXY_URL)
+        return httpx.AsyncClient(transport=transport, timeout=timeout)
+    except ImportError:
+        # Fallback to direct connection if httpx_socks is not installed
+        print("[OAuth] Warning: httpx_socks not installed, using direct connection")
+        return httpx.AsyncClient(timeout=timeout)
+
 
 class OAuthService:
     """Base OAuth service class."""
@@ -194,11 +208,12 @@ class GoogleOAuthService(OAuthService):
     
     async def get_access_token(self, code: str) -> Optional[str]:
         """Exchange authorization code for access token."""
-        async with httpx.AsyncClient() as client:
+        async with get_proxy_client() as client:
             try:
                 print(f"[Google OAuth] Exchanging code for token...")
                 print(f"[Google OAuth] Client ID: {settings.GOOGLE_CLIENT_ID[:20]}...")
                 print(f"[Google OAuth] Redirect URI: {settings.GOOGLE_REDIRECT_URI}")
+                print(f"[Google OAuth] Using proxy: {PROXY_URL}")
                 
                 response = await client.post(
                     self.TOKEN_URL,
@@ -231,7 +246,7 @@ class GoogleOAuthService(OAuthService):
     
     async def get_user_info(self, access_token: str) -> Dict[str, Any]:
         """Get Google user info."""
-        async with httpx.AsyncClient() as client:
+        async with get_proxy_client() as client:
             try:
                 print(f"[Google OAuth] Getting user info...")
                 response = await client.get(
@@ -279,8 +294,9 @@ class GitHubOAuthService(OAuthService):
     
     async def get_access_token(self, code: str) -> Optional[str]:
         """Exchange authorization code for access token."""
-        async with httpx.AsyncClient() as client:
+        async with get_proxy_client() as client:
             try:
+                print(f"[GitHub OAuth] Using proxy: {PROXY_URL}")
                 response = await client.post(
                     self.TOKEN_URL,
                     headers={"Accept": "application/json"},
@@ -299,7 +315,7 @@ class GitHubOAuthService(OAuthService):
     
     async def get_user_email(self, access_token: str) -> Optional[str]:
         """Get user's primary email from GitHub."""
-        async with httpx.AsyncClient() as client:
+        async with get_proxy_client() as client:
             try:
                 response = await client.get(
                     self.USER_EMAIL_URL,
@@ -320,7 +336,7 @@ class GitHubOAuthService(OAuthService):
     
     async def get_user_info(self, access_token: str) -> Dict[str, Any]:
         """Get GitHub user info."""
-        async with httpx.AsyncClient() as client:
+        async with get_proxy_client() as client:
             try:
                 response = await client.get(
                     self.USER_INFO_URL,
