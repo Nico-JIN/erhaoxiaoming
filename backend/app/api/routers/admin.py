@@ -1,6 +1,6 @@
 """Administrative endpoints."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
@@ -113,6 +113,16 @@ def translate_page_path_to_chinese(page_path: str) -> str:
         return page_path
 
 
+def format_datetime_with_timezone(dt):
+    """格式化日期时间，确保包含时区信息"""
+    if dt is None:
+        return None
+    # 如果时间没有时区信息，假设为 UTC
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
+
 
 @router.get("/dashboard", response_model=DashboardStats)
 async def get_dashboard_stats(
@@ -218,7 +228,7 @@ async def get_operation_logs(
             "ip_address": log.ip_address,
             "user_agent": log.user_agent,
             "details": log.details,
-            "created_at": log.created_at.isoformat() if log.created_at else None,
+            "created_at": format_datetime_with_timezone(log.created_at),
         }
         localized_logs.append(log_dict)
     
@@ -529,7 +539,7 @@ async def get_visitor_logs(
                 "username": log.user.username if log.user else "访客",
                 "session_id": log.session_id,
                 "referrer": log.referrer,
-                "created_at": log.created_at.isoformat() if log.created_at else None,
+                "created_at": format_datetime_with_timezone(log.created_at),
             }
             for log in logs
         ]

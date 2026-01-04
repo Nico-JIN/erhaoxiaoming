@@ -1,5 +1,7 @@
 """通知管理 API"""
 
+from datetime import timezone
+
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -44,6 +46,15 @@ def translate_notification_type(ntype: NotificationType) -> str:
     return type_map.get(ntype, ntype.value)
 
 
+def format_datetime_with_timezone(dt):
+    """格式化日期时间，确保包含时区信息"""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
+
 @router.get("/stats")
 async def get_notification_stats(
     unread_only: bool = True,
@@ -79,7 +90,7 @@ async def list_notifications(
             "notification_type_cn": translate_notification_type(notif.notification_type),
             "content": notif.content,
             "is_read": notif.is_read,
-            "created_at": notif.created_at.isoformat() if notif.created_at else None,
+            "created_at": format_datetime_with_timezone(notif.created_at),
             "actor_username": notif.actor.username if notif.actor else None,
             "actor_avatar": notif.actor.avatar_url if notif.actor else None,
             "resource_id": notif.resource_id,
