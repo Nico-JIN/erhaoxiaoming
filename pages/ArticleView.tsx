@@ -174,8 +174,8 @@ const ArticleView: React.FC = () => {
       return;
     }
     try {
-      const { balance } = await resourceService.downloadResource(resource.id);
-      // Don't open download_url directly, just unlock the content
+      // Use purchase endpoint (returns JSON) instead of download endpoint (returns file stream)
+      const { balance } = await resourceService.purchaseResource(resource.id);
       if (typeof balance === 'number') {
         applyUserPatch({ points: balance });
       } else {

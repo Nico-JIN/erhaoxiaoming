@@ -164,6 +164,12 @@ export const parseResourceDto = (payload: ResourceDto): Resource => {
   };
 };
 
+export interface PurchaseResourceResponse {
+  success: boolean;
+  balance: number;
+  message: string;
+}
+
 class ResourceService {
   async listResources(filters: ResourceFilters = {}): Promise<Resource[]> {
     const response = await api.get<ResourceDto[]>('/api/resources/', {
@@ -282,6 +288,18 @@ class ResourceService {
       download_url: ensureAbsoluteUrl(response.data.download_url) ?? response.data.download_url,
     };
   }
+
+  /**
+   * Purchase/unlock a resource by deducting points.
+   * Does NOT trigger file download - use downloadResource for that.
+   */
+  async purchaseResource(resourceId: string | number): Promise<PurchaseResourceResponse> {
+    const response = await api.post<PurchaseResourceResponse>(
+      `/api/resources/${resourceId}/purchase`
+    );
+    return response.data;
+  }
 }
 
 export default new ResourceService();
+

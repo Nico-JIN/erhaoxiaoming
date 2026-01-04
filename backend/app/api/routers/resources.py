@@ -22,6 +22,94 @@ from pydantic import BaseModel
 router = APIRouter(prefix="/api/resources", tags=["Resources"])
 
 
+class PurchaseResponse(BaseModel):
+    """Response model for resource purchase."""
+    success: bool
+    balance: int
+    message: str
+
+
+@router.post("/{resource_id}/purchase", response_model=PurchaseResponse)
+async def purchase_resource(
+    resource_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Purchase/unlock a resource by deducting points. Does NOT trigger file download."""
+    resource = db.query(Resource).filter(Resource.id == resource_id).first()
+    if not resource:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
+
+    # Free resources don't need purchase
+    if resource.is_free or resource.points_required == 0:
+        return PurchaseResponse(success=True, balance=current_user.points, message="Resource is free")
+
+    # Check if already purchased
+    from backend.app.models import PointTransaction, TransactionType
+    existing_purchase = (
+        db.query(PointTransaction)
+        .filter(
+            PointTransaction.user_id == current_user.id,
+            PointTransaction.type == TransactionType.PURCHASE,
+            PointTransaction.reference_id == f"resource_{resource.id}",
+        )
+        .first()
+    )
+
+    if existing_purchase:
+        return PurchaseResponse(success=True, balance=current_user.points, message="Already purchased")
+
+    # Admins don't need to pay
+    if current_user.role == UserRole.ADMIN:
+        return PurchaseResponse(success=True, balance=current_user.points, message="Admin access granted")
+
+    # Deduct points
+    try:
+        deduct_points(
+            db=db,
+            user=current_user,
+            amount=resource.points_required,
+            description=f"Purchased resource: {resource.title}",
+            reference_id=f"resource_{resource.id}",
+        )
+        db.refresh(current_user)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=str(exc),
+        ) from exc
+
+    # Log the operation
+    log_operation(
+        db=db,
+        user_id=current_user.id,
+        action="RESOURCE_PURCHASE",
+        resource_type="resource",
+        resource_id=str(resource_id),
+        ip_address=request.client.host if request.client else "0.0.0.0",
+        user_agent=request.headers.get("user-agent", ""),
+    )
+
+    # Notify admins
+    admins = db.query(User).filter(User.role == UserRole.ADMIN).all()
+    for admin in admins:
+        if admin.id != current_user.id:
+            notification_service.create_notification(
+                db=db,
+                user_id=admin.id,
+                actor_id=current_user.id,
+                notification_type=NotificationType.DOWNLOAD,
+                resource_id=resource_id,
+                content=f"{current_user.username} 购买了资源《{resource.title}》"
+            )
+
+    return PurchaseResponse(
+        success=True,
+        balance=current_user.points,
+        message=f"Successfully purchased for {resource.points_required} points"
+    )
+
 @router.get("/", response_model=List[ResourceListResponse])
 async def list_resources(
     skip: int = 0,
