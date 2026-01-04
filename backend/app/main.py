@@ -1,5 +1,6 @@
 """FastAPI application factory."""
 
+from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -95,7 +96,18 @@ async def root():
 async def health_check():
     return {
         "status": "healthy",
-        "timestamp": "2024-01-01T00:00:00Z",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get("/api/server-time")
+async def get_server_time():
+    """返回服务器当前时间，用于前端时间同步"""
+    now = datetime.now(timezone.utc)
+    return {
+        "server_time": now.isoformat(),
+        "timestamp": int(now.timestamp() * 1000),  # Unix timestamp in milliseconds
+        "timezone": "UTC"
     }
 
 

@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, and_
@@ -63,7 +64,7 @@ class MessageService:
             })
             
         # Sort by last message time
-        conversations.sort(key=lambda x: x["last_message_time"] or datetime.min, reverse=True)
+        conversations.sort(key=lambda x: x["last_message_at"] or datetime.min, reverse=True)
         return conversations
 
     def get_messages(self, db: Session, user_id: str, other_user_id: str, skip: int = 0, limit: int = 50) -> List[Message]:
