@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from typing import List, Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from sqlalchemy import func
@@ -628,11 +629,12 @@ async def download_attachment(
             
             content_type, file_stream = storage.stream_file(attachment.file_url)
             
+            encoded_filename = quote(attachment.file_name)
             return StreamingResponse(
                 file_stream,
                 media_type=content_type or "application/octet-stream",
                 headers={
-                    "Content-Disposition": f'attachment; filename="{attachment.file_name}"',
+                    "Content-Disposition": f'attachment; filename="{attachment.file_name.encode("ascii", "ignore").decode("ascii")}"; filename*=utf-8\'\'{encoded_filename}',
                     "X-User-Balance": str(current_user.points),
                     "X-Download-Count": str(attachment.download_count),
                 }
@@ -740,11 +742,12 @@ async def download_resource(
             content_type, file_stream = storage.stream_file(resource.file_url)
             filename = resource.file_url.split('/')[-1]
             
+            encoded_filename = quote(filename)
             return StreamingResponse(
                 file_stream,
                 media_type=content_type or "application/octet-stream",
                 headers={
-                    "Content-Disposition": f'attachment; filename="{filename}"',
+                    "Content-Disposition": f'attachment; filename="{filename.encode("ascii", "ignore").decode("ascii")}"; filename*=utf-8\'\'{encoded_filename}',
                     "X-User-Balance": str(current_user.points),
                     "X-Download-Count": str(resource.downloads),
                 }
