@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.security import get_current_user
 from backend.app.db.session import get_db
-from backend.app.models import Comment, Resource, ResourceLike, User, NotificationType
+from backend.app.models import Comment, Resource, ResourceLike, User, NotificationType, UserRole
 from backend.app.schemas import CommentCreate, CommentResponse, CommentUpdate, LikeResponse
 from backend.app.services.operations import log_operation
 from backend.app.services import notification_service
@@ -60,7 +60,6 @@ async def create_like(
     )
     
     # Create notification for all admins
-    from backend.app.models import UserRole
     admins = db.query(User).filter(User.role == UserRole.ADMIN).all()
     for admin in admins:
         if admin.id != current_user.id:
@@ -217,7 +216,6 @@ async def create_comment(
     )
     
     # Create notification for all admins
-    from backend.app.models import UserRole
     admins = db.query(User).filter(User.role == UserRole.ADMIN).all()
     
     if comment_data.parent_id:

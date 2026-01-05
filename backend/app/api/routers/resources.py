@@ -7,9 +7,13 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from backend.app.core.security import get_current_admin, get_current_user, get_current_user_optional
+from backend.app.core.security import get_current_admin, get_current_user, get_current_user_optional, get_current_user_for_download
 from backend.app.db.session import get_db
-from backend.app.models import Resource, ResourceStatus, User, ResourceAttachment, NotificationType, UserRole, Category
+from backend.app.models import (
+    Resource, ResourceStatus, User, ResourceAttachment, 
+    NotificationType, UserRole, Category, PointTransaction, TransactionType,
+    Comment, ResourceLike
+)
 from backend.app.schemas import ResourceCreate, ResourceListResponse, ResourceResponse, ResourceUpdate, CategorizedResourcesResponse
 from backend.app.services.operations import log_operation
 from backend.app.services.points import deduct_points
@@ -46,7 +50,6 @@ async def purchase_resource(
         return PurchaseResponse(success=True, balance=current_user.points, message="Resource is free")
 
     # Check if already purchased
-    from backend.app.models import PointTransaction, TransactionType
     existing_purchase = (
         db.query(PointTransaction)
         .filter(
@@ -219,8 +222,6 @@ async def get_resource(
     
     # Check if user has purchased this resource or is admin
     if current_user and not resource.is_free and resource.points_required > 0:
-        from backend.app.models import PointTransaction, TransactionType, UserRole
-        
         # Admins always have access
         if current_user.role == UserRole.ADMIN:
             resource.is_purchased_by_user = True
@@ -242,8 +243,6 @@ async def get_resource(
         resource.is_purchased_by_user = False
     
     # Get like and comment counts
-    from backend.app.models import Comment, ResourceLike
-    
     resource.like_count = db.query(ResourceLike).filter(ResourceLike.resource_id == resource.id).count()
     resource.comment_count = db.query(Comment).filter(Comment.resource_id == resource.id).count()
     
@@ -533,7 +532,7 @@ async def update_attachment(
     return attachment.resource
 
 
-from backend.app.core.security import get_current_admin, get_current_user, get_current_user_optional, get_current_user_for_download
+# Removed redundant imports already at top
 
 @router.get("/attachments/{attachment_id}/download")
 async def download_attachment(
@@ -567,7 +566,6 @@ async def download_attachment(
              # Or we should re-verify purchase.
              # Let's assume if they paid for the resource, they can download all attachments.
              # We need to check PointTransaction for the resource.
-             from backend.app.models import PointTransaction, TransactionType
              existing_purchase = (
                 db.query(PointTransaction)
                 .filter(
@@ -598,7 +596,6 @@ async def download_attachment(
     db.commit()
     
     # Create notification for all admins
-    from backend.app.models import UserRole, NotificationType
     admins = db.query(User).filter(User.role == UserRole.ADMIN).all()
     for admin in admins:
         if admin.id != current_user.id:
@@ -712,7 +709,6 @@ async def download_resource(
     )
 
     # Create notification for all admins
-    from backend.app.models import UserRole
     admins = db.query(User).filter(User.role == UserRole.ADMIN).all()
     for admin in admins:
         if admin.id != current_user.id:

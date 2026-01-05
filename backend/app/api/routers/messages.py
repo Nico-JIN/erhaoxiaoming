@@ -5,7 +5,8 @@ from backend.app.db.session import get_db
 from backend.app.services.message_service import message_service
 from backend.app.schemas.message import Message, MessageCreate, Conversation
 from backend.app.core.security import get_current_user
-from backend.app.models import User
+from backend.app.models import User, UserRole, NotificationType
+from backend.app.services import notification_service
 
 router = APIRouter(prefix="/api/messages", tags=["Messages"])
 
@@ -27,8 +28,6 @@ def send_message(
     message = message_service.send_message(db, current_user.id, message_in)
     
     # Notify all admins about the private message
-    from backend.app.models import UserRole, NotificationType
-    from backend.app.services import notification_service
     admins = db.query(User).filter(User.role == UserRole.ADMIN).all()
     for admin in admins:
         if admin.id != current_user.id:
