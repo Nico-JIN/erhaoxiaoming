@@ -3,13 +3,14 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, '.', '');
+  // Load env file based on `mode` in the current working directory.
+  const env = loadEnv(mode, process.cwd(), '');
 
   return {
     server: {
       port: 5005,
       host: '0.0.0.0',
-      allowedHosts: ["ai.dxin.store","api.dxin.store"]   // ★ 添加这个解决问题
+      allowedHosts: ["ai.dxin.store", "api.dxin.store"]   // ★ 添加这个解决问题
     },
     plugins: [react()],
     define: {

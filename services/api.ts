@@ -8,16 +8,19 @@ function getApiBaseUrl(): string {
   }
 
   const hostname = window.location.hostname;
+  const protocol = window.location.protocol; // 'http:' or 'https:'
 
-  // Production domain
-  if (hostname === 'ai.dxin.store') {
-    console.log('🌐 Production mode: Using https://api.dxin.store');
-    return 'https://api.dxin.store';
+  // Production domain - ALWAYS use HTTPS
+  if (hostname === 'ai.dxin.store' || hostname === 'api.dxin.store') {
+    const apiUrl = 'https://api.dxin.store';
+    console.log('🌐 Production mode: Using', apiUrl);
+    return apiUrl;
   }
 
-  // Development/localhost
-  console.log('🔧 Development mode: Using http://localhost:8000');
-  return import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  // Development/localhost - use same protocol as page
+  const devUrl = import.meta.env.VITE_API_URL || `${protocol}//localhost:8000`;
+  console.log('🔧 Development mode: Using', devUrl);
+  return devUrl;
 }
 
 export const API_BASE_URL = getApiBaseUrl();
