@@ -243,6 +243,7 @@ class PointTransactionCreate(PointTransactionBase):
 class PointTransactionResponse(PointTransactionBase):
     id: int
     user_id: Optional[str]  # UUID
+    username: Optional[str] = None
     balance_after: int
     created_at: datetime
 

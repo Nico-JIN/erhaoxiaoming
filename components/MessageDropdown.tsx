@@ -38,7 +38,11 @@ const MessageDropdown: React.FC<MessageDropdownProps> = ({ onClose, isMobile = f
         // Click outside to close (desktop only)
         if (!isMobile) {
             const handleClickOutside = (event: MouseEvent) => {
-                if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                const target = event.target as HTMLElement;
+                // Ignore if clicking on a portal/modal or any of its children
+                const isModalClick = target.closest('.fixed.inset-0.z-\\[9999\\]'); // ChatModal root
+
+                if (dropdownRef.current && !dropdownRef.current.contains(target) && !isModalClick) {
                     onClose();
                 }
             };

@@ -213,6 +213,10 @@ class PointTransaction(Base):
 
     user = relationship("User", back_populates="point_transactions")
 
+    @property
+    def username(self):
+        return self.user.username if self.user else None
+
 
 class OperationLog(Base):
     __tablename__ = "operation_logs"

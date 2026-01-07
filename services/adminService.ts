@@ -21,6 +21,7 @@ export interface UserManagement {
   is_active: boolean;
   created_at: string;
   avatar_url?: string;
+  phone?: string;
 }
 
 export interface AdminResourceFilters {

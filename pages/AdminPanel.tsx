@@ -22,6 +22,7 @@ import {
   Download,
   Eye,
   MessageCircle,
+  X,
 } from 'lucide-react';
 import notificationService, { Notification, NotificationStats } from '../services/notificationService';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -121,6 +122,9 @@ const AdminPanel: React.FC = () => {
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [editingStatsResource, setEditingStatsResource] = useState<Resource | null>(null);
   const [statsForm, setStatsForm] = useState({ views: 0, downloads: 0 });
+
+  // User Detail State
+  const [viewingUser, setViewingUser] = useState<UserManagement | null>(null);
 
   // Notification State
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -848,7 +852,7 @@ const AdminPanel: React.FC = () => {
             {transactions.map((tx) => (
               <tr key={tx.id} className="hover:bg-slate-50">
                 <td className="px-6 py-3 font-mono text-slate-600">{tx.id}</td>
-                <td className="px-6 py-3 text-slate-800 font-medium">#{tx.user_id}</td>
+                <td className="px-6 py-3 text-slate-800 font-medium">{tx.username || `User #${tx.user_id}`}</td>
                 <td className="px-6 py-3 text-slate-500">{tx.type}</td>
                 <td className={`px-6 py-3 font-bold ${tx.amount >= 0 ? 'text-green-600' : 'text-slate-600'}`}>{tx.amount}</td>
                 <td className="px-6 py-3 text-slate-500">{tx.balance_after}</td>
@@ -933,12 +937,18 @@ const AdminPanel: React.FC = () => {
                   >
                     {t('admin.usersTable.status')} {sortField === 'is_active' && (sortDirection === 'asc' ? '↑' : '↓')}
                   </th>
+                  <th
+                    className="px-6 py-3 cursor-pointer hover:text-indigo-600 transition-colors"
+                    onClick={() => handleSort('phone')}
+                  >
+                    手机号 {sortField === 'phone' && (sortDirection === 'asc' ? '↑' : '↓')}
+                  </th>
                   <th className="px-6 py-3 text-right">{t('admin.usersTable.actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {sortedUsers.map((u) => (
-                  <tr key={u.id} className="hover:bg-slate-50">
+                  <tr key={u.id} className="hover:bg-slate-50 group">
                     <td className="px-6 py-4">
                       <input
                         type="checkbox"
@@ -947,17 +957,27 @@ const AdminPanel: React.FC = () => {
                         className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                       />
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="font-semibold text-slate-900">{u.full_name || u.username}</span>
-                        <span className="text-xs text-slate-500">{u.email || t('admin.usersTable.emailFallback')}</span>
+                    <td
+                      className="px-6 py-4 cursor-pointer"
+                      onClick={() => setViewingUser(u)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={u.avatar_url || `https://ui-avatars.com/api/?name=${u.username}&background=random`}
+                          className="w-10 h-10 rounded-full object-cover border border-slate-100"
+                          alt=""
+                        />
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">{u.full_name || u.username}</span>
+                          <span className="text-xs text-slate-500">{u.email || t('admin.usersTable.emailFallback')}</span>
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <select
                         value={u.role}
                         onChange={(event) => handleRoleChange(u.id, event.target.value as UserManagement['role'])}
-                        className="border border-slate-200 rounded-lg px-2 py-1 text-sm"
+                        className="border border-slate-200 rounded-lg px-2 py-1 text-sm bg-transparent"
                       >
                         <option value="USER">{t('admin.roleUser')}</option>
                         <option value="VIP">{t('admin.roleVip')}</option>
@@ -966,6 +986,9 @@ const AdminPanel: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 font-bold text-indigo-600">{u.points}</td>
                     <td className="px-6 py-4">
+                      <span className="text-slate-600 font-mono text-xs">{u.phone || '-'}</span>
+                    </td>
+                    <td className="px-6 py-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${u.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                         {u.is_active ? t('admin.usersTable.active') : t('admin.usersTable.banned')}
                       </span>
@@ -973,13 +996,13 @@ const AdminPanel: React.FC = () => {
                     <td className="px-6 py-4 text-right space-x-2">
                       <button
                         onClick={() => handleToggleStatus(u.id, !u.is_active)}
-                        className="text-xs px-3 py-1 rounded-lg border border-slate-200 hover:bg-slate-100"
+                        className="text-xs px-3 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors"
                       >
                         {u.is_active ? t('admin.usersTable.disable') : t('admin.usersTable.enable')}
                       </button>
                       <button
                         onClick={() => handleAdjustPoints(u)}
-                        className="text-xs px-3 py-1 rounded-lg border border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+                        className="text-xs px-3 py-1 rounded-lg border border-indigo-200 text-indigo-600 hover:bg-indigo-50 transition-colors"
                       >
                         {t('admin.usersTable.adjust')}
                       </button>
@@ -1548,6 +1571,95 @@ const AdminPanel: React.FC = () => {
       </div>
     );
   };
+  const renderUserDetailModal = () => {
+    if (!viewingUser) return null;
+
+    const infoItem = (label: string, value: string | React.ReactNode, icon: any) => {
+      const Icon = icon;
+      return (
+        <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+          <div className="p-2 bg-white text-indigo-500 rounded-lg shadow-sm">
+            <Icon size={18} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">{label}</p>
+            <p className="text-slate-800 font-medium truncate">{value}</p>
+          </div>
+        </div>
+      );
+    };
+
+    return (
+      <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+        <div
+          className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-fade-in"
+          onClick={() => setViewingUser(null)}
+        />
+        <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-scale-in">
+          {/* Header */}
+          <div className="bg-indigo-600 p-8 text-white relative">
+            <button
+              onClick={() => setViewingUser(null)}
+              className="absolute top-6 right-6 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+            >
+              <X size={20} />
+            </button>
+            <div className="flex items-center gap-6">
+              <img
+                src={viewingUser.avatar_url || `https://ui-avatars.com/api/?name=${viewingUser.username}&background=random`}
+                className="w-24 h-24 rounded-2xl object-cover border-4 border-white/20 shadow-xl"
+                alt=""
+              />
+              <div>
+                <h3 className="text-3xl font-black">{viewingUser.full_name || viewingUser.username}</h3>
+                <div className="flex items-center gap-3 mt-2">
+                  <span className="px-3 py-1 bg-white/20 rounded-full text-xs font-bold uppercase tracking-widest">{viewingUser.role}</span>
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest ${viewingUser.is_active ? 'bg-green-400/20 text-green-300' : 'bg-red-400/20 text-red-300'}`}>
+                    {viewingUser.is_active ? 'Active' : 'Banned'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {infoItem('User ID', viewingUser.id, Activity)}
+              {infoItem('Username', viewingUser.username, Users)}
+              {infoItem('Email', viewingUser.email || '-', Bell)}
+              {infoItem('Phone', viewingUser.phone || '-', Smartphone)}
+              {infoItem('Points Balance', viewingUser.points.toLocaleString(), Wallet)}
+              {infoItem('Total Recharged', `¥ ${viewingUser.total_recharged.toLocaleString()}`, CreditCard)}
+              {infoItem('Created At', new Date(viewingUser.created_at).toLocaleString(), Eye)}
+            </div>
+
+            <div className="mt-8 flex items-center justify-between p-4 bg-slate-900 rounded-2xl text-white">
+              <div className="flex gap-4">
+                <button
+                  onClick={() => {
+                    handleToggleStatus(viewingUser.id, !viewingUser.is_active);
+                    setViewingUser(prev => prev ? { ...prev, is_active: !prev.is_active } : null);
+                  }}
+                  className={`px-6 py-2.5 rounded-xl font-bold transition-all ${viewingUser.is_active ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`}
+                >
+                  {viewingUser.is_active ? 'BAN USER' : 'UNBAN USER'}
+                </button>
+                <button
+                  onClick={() => {
+                    handleAdjustPoints(viewingUser);
+                  }}
+                  className="px-6 py-2.5 bg-indigo-500 hover:bg-indigo-600 rounded-xl font-bold transition-all"
+                >
+                  ADJUST POINTS
+                </button>
+              </div>
+              <p className="text-slate-400 text-xs italic">Manage user account status and balance</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const renderFinanceTab = () => (
     <div className="space-y-6 animate-fade-in">
@@ -2075,6 +2187,7 @@ const AdminPanel: React.FC = () => {
         type={notificationConfig.type}
         soundType={notificationConfig.soundType}
       />
+      {renderUserDetailModal()}
     </div>
   );
 };

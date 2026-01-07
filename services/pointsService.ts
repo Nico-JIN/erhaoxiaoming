@@ -3,6 +3,7 @@ import api from './api';
 export interface PointTransaction {
   id: number;
   user_id: number;
+  username?: string;
   amount: number;
   balance_after: number;
   type: 'REGISTER' | 'RECHARGE' | 'PURCHASE' | 'REFUND' | 'ADMIN_ADJUST';
