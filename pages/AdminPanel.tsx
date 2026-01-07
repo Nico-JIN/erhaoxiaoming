@@ -1322,139 +1322,206 @@ const AdminPanel: React.FC = () => {
     }
   };
 
-  const renderNotifications = () => (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-slate-800">消息通知</h2>
-          <p className="text-sm text-slate-500">查看所有系统通知和用户活动</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {unreadCount > 0 && (
-            <button
-              onClick={handleMarkAllAsRead}
-              className="px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100"
-            >
-              全部标为已读
-            </button>
-          )}
-          <button
-            onClick={async () => {
-              const notifList = await notificationService.getNotifications(0, 20);
-              setNotifications(notifList);
-              const unread = await notificationService.getUnreadCount();
-              setUnreadCount(unread);
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 shadow-lg shadow-slate-200"
-          >
-            刷新
-          </button>
-        </div>
-      </div>
+  const renderNotifications = () => {
+    const handleFilterClick = async (type: string | null) => {
+      setActiveFilter(type);
+      const notifList = await notificationService.getNotifications(0, 20, type || undefined);
+      setNotifications(notifList);
+    };
 
-      {/* Stats Cards */}
-      {notificationStats && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-            <div className="flex items-center gap-2 mb-2">
-              <Heart size={18} className="text-pink-500" />
-              <span className="text-xs font-medium text-slate-500">点赞</span>
-            </div>
-            <div className="text-2xl font-bold text-slate-900">{notificationStats.like}</div>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-            <div className="flex items-center gap-2 mb-2">
-              <MessageCircle size={18} className="text-blue-500" />
-              <span className="text-xs font-medium text-slate-500">评论</span>
-            </div>
-            <div className="text-2xl font-bold text-slate-900">{notificationStats.comment}</div>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-            <div className="flex items-center gap-2 mb-2">
-              <Download size={18} className="text-green-500" />
-              <span className="text-xs font-medium text-slate-500">下载</span>
-            </div>
-            <div className="text-2xl font-bold text-slate-900">{notificationStats.download}</div>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-            <div className="flex items-center gap-2 mb-2">
-              <MessageSquare size={18} className="text-indigo-500" />
-              <span className="text-xs font-medium text-slate-500">私信</span>
-            </div>
-            <div className="text-2xl font-bold text-slate-900">{notificationStats.message}</div>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-            <div className="flex items-center gap-2 mb-2">
-              <Bell size={18} className="text-slate-500" />
-              <span className="text-xs font-medium text-slate-500">总计</span>
-            </div>
-            <div className="text-2xl font-bold text-slate-900">{notificationStats.total}</div>
-          </div>
-        </div>
-      )}
+    const handleNotificationClick = async (notif: Notification) => {
+      // Mark as read if not already
+      if (!notif.is_read) {
+        await handleMarkAsRead(notif.id);
+      }
 
-      {/* Notifications List */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        {notifications.length === 0 ? (
-          <div className="py-16 text-center text-slate-400">
-            <Bell size={48} className="mx-auto mb-4 opacity-50" />
-            <p>暂无通知</p>
+      // Navigate based on type
+      if (notif.notification_type === 'MESSAGE' && notif.actor_id) {
+        navigate(`/messages?userId=${notif.actor_id}`);
+      } else if (notif.resource_id) {
+        navigate(`/article/${notif.resource_id}`);
+      }
+    };
+
+    const filterTabs = [
+      { key: null, label: '全部', icon: Bell },
+      { key: 'LIKE', label: '点赞', icon: Heart },
+      { key: 'COMMENT', label: '评论', icon: MessageCircle },
+      { key: 'DOWNLOAD', label: '下载', icon: Download },
+      { key: 'MESSAGE', label: '私信', icon: MessageSquare },
+    ];
+
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-slate-800">消息通知</h2>
+            <p className="text-sm text-slate-500">查看所有系统通知和用户活动</p>
           </div>
-        ) : (
-          <div className="divide-y divide-slate-100">
-            {notifications.map((notif) => (
-              <div
-                key={notif.id}
-                className={`p-4 flex items-start gap-4 hover:bg-slate-50 transition-colors ${!notif.is_read ? 'bg-indigo-50/30' : ''}`}
+          <div className="flex items-center gap-3">
+            {unreadCount > 0 && (
+              <button
+                onClick={handleMarkAllAsRead}
+                className="px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100"
               >
-                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
-                  {getNotificationIcon(notif.notification_type)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-semibold text-slate-900">{notif.actor_username || '系统'}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${notif.notification_type === 'LIKE' ? 'bg-pink-100 text-pink-700' :
-                      notif.notification_type === 'COMMENT' || notif.notification_type === 'REPLY' ? 'bg-blue-100 text-blue-700' :
-                        notif.notification_type === 'DOWNLOAD' ? 'bg-green-100 text-green-700' :
-                          notif.notification_type === 'MESSAGE' ? 'bg-indigo-100 text-indigo-700' :
-                            'bg-slate-100 text-slate-700'
-                      }`}>
-                      {notif.notification_type === 'LIKE' ? '点赞' :
-                        notif.notification_type === 'COMMENT' ? '评论' :
-                          notif.notification_type === 'REPLY' ? '回复' :
-                            notif.notification_type === 'DOWNLOAD' ? '下载' :
-                              notif.notification_type === 'VIEW' ? '阅读' :
-                                notif.notification_type === 'MESSAGE' ? '私信' : '通知'}
-                    </span>
-                    {!notif.is_read && (
-                      <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-                    )}
-                  </div>
-                  <p className="text-sm text-slate-600 mb-1">{notif.content}</p>
-                  {notif.resource_title && (
-                    <p className="text-xs text-slate-400">相关文章：{notif.resource_title}</p>
-                  )}
-                  <p className="text-xs text-slate-400 mt-1">
-                    {new Date(notif.created_at).toLocaleString('zh-CN')}
-                  </p>
-                </div>
-                <div className="shrink-0">
-                  {!notif.is_read && (
-                    <button
-                      onClick={() => handleMarkAsRead(notif.id)}
-                      className="text-xs text-indigo-600 hover:underline"
-                    >
-                      标为已读
-                    </button>
-                  )}
-                </div>
+                全部标为已读
+              </button>
+            )}
+            <button
+              onClick={async () => {
+                const notifList = await notificationService.getNotifications(0, 20, activeFilter || undefined);
+                setNotifications(notifList);
+                const unread = await notificationService.getUnreadCount();
+                setUnreadCount(unread);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 shadow-lg shadow-slate-200"
+            >
+              刷新
+            </button>
+          </div>
+        </div>
+
+        {/* Stats Cards - Clickable */}
+        {notificationStats && (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div
+              onClick={() => handleFilterClick('LIKE')}
+              className={`bg-white p-4 rounded-xl border shadow-sm cursor-pointer transition-all hover:shadow-md hover:border-pink-200 ${activeFilter === 'LIKE' ? 'border-pink-400 ring-2 ring-pink-100' : 'border-slate-100'}`}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <Heart size={18} className="text-pink-500" />
+                <span className="text-xs font-medium text-slate-500">点赞</span>
               </div>
-            ))}
+              <div className="text-2xl font-bold text-slate-900">{notificationStats.like}</div>
+            </div>
+            <div
+              onClick={() => handleFilterClick('COMMENT')}
+              className={`bg-white p-4 rounded-xl border shadow-sm cursor-pointer transition-all hover:shadow-md hover:border-blue-200 ${activeFilter === 'COMMENT' ? 'border-blue-400 ring-2 ring-blue-100' : 'border-slate-100'}`}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <MessageCircle size={18} className="text-blue-500" />
+                <span className="text-xs font-medium text-slate-500">评论</span>
+              </div>
+              <div className="text-2xl font-bold text-slate-900">{notificationStats.comment}</div>
+            </div>
+            <div
+              onClick={() => handleFilterClick('DOWNLOAD')}
+              className={`bg-white p-4 rounded-xl border shadow-sm cursor-pointer transition-all hover:shadow-md hover:border-green-200 ${activeFilter === 'DOWNLOAD' ? 'border-green-400 ring-2 ring-green-100' : 'border-slate-100'}`}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <Download size={18} className="text-green-500" />
+                <span className="text-xs font-medium text-slate-500">下载</span>
+              </div>
+              <div className="text-2xl font-bold text-slate-900">{notificationStats.download}</div>
+            </div>
+            <div
+              onClick={() => handleFilterClick('MESSAGE')}
+              className={`bg-white p-4 rounded-xl border shadow-sm cursor-pointer transition-all hover:shadow-md hover:border-indigo-200 ${activeFilter === 'MESSAGE' ? 'border-indigo-400 ring-2 ring-indigo-100' : 'border-slate-100'}`}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <MessageSquare size={18} className="text-indigo-500" />
+                <span className="text-xs font-medium text-slate-500">私信</span>
+              </div>
+              <div className="text-2xl font-bold text-slate-900">{notificationStats.message}</div>
+            </div>
+            <div
+              onClick={() => handleFilterClick(null)}
+              className={`bg-white p-4 rounded-xl border shadow-sm cursor-pointer transition-all hover:shadow-md hover:border-slate-300 ${activeFilter === null ? 'border-slate-400 ring-2 ring-slate-100' : 'border-slate-100'}`}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <Bell size={18} className="text-slate-500" />
+                <span className="text-xs font-medium text-slate-500">总计</span>
+              </div>
+              <div className="text-2xl font-bold text-slate-900">{notificationStats.total}</div>
+            </div>
           </div>
         )}
+
+        {/* Filter Tabs */}
+        <div className="flex flex-wrap gap-2">
+          {filterTabs.map(tab => (
+            <button
+              key={tab.key || 'all'}
+              onClick={() => handleFilterClick(tab.key)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${activeFilter === tab.key
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+            >
+              <tab.icon size={14} />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Notifications List */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          {notifications.length === 0 ? (
+            <div className="py-16 text-center text-slate-400">
+              <Bell size={48} className="mx-auto mb-4 opacity-50" />
+              <p>暂无通知</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {notifications.map((notif) => (
+                <div
+                  key={notif.id}
+                  onClick={() => handleNotificationClick(notif)}
+                  className={`p-4 flex items-start gap-4 hover:bg-slate-50 transition-colors cursor-pointer ${!notif.is_read ? 'bg-indigo-50/30' : ''}`}
+                >
+                  <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
+                    {getNotificationIcon(notif.notification_type)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-semibold text-slate-900">{notif.actor_username || '系统'}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${notif.notification_type === 'LIKE' ? 'bg-pink-100 text-pink-700' :
+                        notif.notification_type === 'COMMENT' || notif.notification_type === 'REPLY' ? 'bg-blue-100 text-blue-700' :
+                          notif.notification_type === 'DOWNLOAD' ? 'bg-green-100 text-green-700' :
+                            notif.notification_type === 'MESSAGE' ? 'bg-indigo-100 text-indigo-700' :
+                              'bg-slate-100 text-slate-700'
+                        }`}>
+                        {notif.notification_type === 'LIKE' ? '点赞' :
+                          notif.notification_type === 'COMMENT' ? '评论' :
+                            notif.notification_type === 'REPLY' ? '回复' :
+                              notif.notification_type === 'DOWNLOAD' ? '下载' :
+                                notif.notification_type === 'VIEW' ? '阅读' :
+                                  notif.notification_type === 'MESSAGE' ? '私信' : '通知'}
+                      </span>
+                      {!notif.is_read && (
+                        <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                      )}
+                    </div>
+                    <p className="text-sm text-slate-600 mb-1">{notif.content}</p>
+                    {notif.resource_title && (
+                      <p className="text-xs text-indigo-600 hover:underline">相关文章：{notif.resource_title}</p>
+                    )}
+                    <p className="text-xs text-slate-400 mt-1">
+                      {new Date(notif.created_at).toLocaleString('zh-CN')}
+                    </p>
+                  </div>
+                  <div className="shrink-0 flex flex-col items-end gap-2">
+                    {!notif.is_read && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleMarkAsRead(notif.id);
+                        }}
+                        className="text-xs text-indigo-600 hover:underline"
+                      >
+                        标为已读
+                      </button>
+                    )}
+                    <span className="text-xs text-slate-400">点击查看详情</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderFinanceTab = () => (
     <div className="space-y-6 animate-fade-in">

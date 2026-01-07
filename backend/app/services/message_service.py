@@ -86,4 +86,12 @@ class MessageService:
             
         return messages
 
+    def get_unread_count(self, db: Session, user_id: str) -> int:
+        """Get total count of unread messages for a user."""
+        return db.query(Message).filter(
+            Message.receiver_id == user_id,
+            Message.is_read == False
+        ).count()
+
 message_service = MessageService()
+

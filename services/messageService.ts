@@ -39,7 +39,18 @@ const messageService = {
             params: { skip, limit }
         });
         return response.data;
+    },
+
+    getUnreadCount: async (): Promise<number> => {
+        const response = await api.get<{ count: number }>('/api/messages/unread-count');
+        return response.data.count;
+    },
+
+    getRecentConversations: async (limit: number = 5): Promise<Conversation[]> => {
+        const conversations = await messageService.getConversations();
+        return conversations.slice(0, limit);
     }
 };
 
 export default messageService;
+

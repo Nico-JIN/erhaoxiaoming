@@ -50,6 +50,16 @@ def get_conversations(
     """List conversations (users you have chatted with)"""
     return message_service.get_conversations(db, current_user.id)
 
+@router.get("/unread-count")
+def get_unread_count(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get count of unread messages for current user"""
+    count = message_service.get_unread_count(db, current_user.id)
+    return {"count": count}
+
+
 @router.get("/{other_user_id}", response_model=List[Message])
 def get_messages(
     other_user_id: str,

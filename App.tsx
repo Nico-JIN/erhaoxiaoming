@@ -15,8 +15,10 @@ import OAuthSuccess from './pages/OAuthSuccess';
 import OAuthError from './pages/OAuthError';
 import PageTracker from './components/PageTracker';
 import NotificationDropdown from './components/NotificationDropdown';
+import MessageDropdown from './components/MessageDropdown';
 import notificationService from './services/notificationService';
-import { Search, Wallet, Globe, X, Bell } from 'lucide-react';
+import messageService from './services/messageService';
+import { Search, Wallet, Globe, X, Bell, MessageCircle } from 'lucide-react';
 
 import { useLanguage, LanguageProvider } from './contexts/LanguageContext';
 import { useAuth, AuthProvider } from './contexts/AuthContext';
@@ -37,6 +39,39 @@ const Navbar: React.FC<{ onLoginClick: () => void }> = ({ onLoginClick }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
+  // Message State
+  const [showMessages, setShowMessages] = useState(false);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+  const [prevUnreadMessageCount, setPrevUnreadMessageCount] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect mobile device
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Play notification sound
+  const playNotificationSound = () => {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      oscillator.frequency.setValueAtTime(523.25, audioContext.currentTime);
+      oscillator.frequency.setValueAtTime(659.25, audioContext.currentTime + 0.1);
+      gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.3);
+    } catch (e) {
+      console.error('Failed to play sound:', e);
+    }
+  };
+
   useEffect(() => {
     if (user) {
       const fetchUnread = async () => {
@@ -50,6 +85,29 @@ const Navbar: React.FC<{ onLoginClick: () => void }> = ({ onLoginClick }) => {
       fetchUnread();
       // Poll every minute
       const interval = setInterval(fetchUnread, 60000);
+      return () => clearInterval(interval);
+    }
+  }, [user]);
+
+  // Fetch message unread count with sound notification
+  useEffect(() => {
+    if (user) {
+      const fetchMessageUnread = async () => {
+        try {
+          const count = await messageService.getUnreadCount();
+          // Play sound if new messages arrived
+          if (count > prevUnreadMessageCount && prevUnreadMessageCount !== 0) {
+            playNotificationSound();
+          }
+          setPrevUnreadMessageCount(unreadMessageCount);
+          setUnreadMessageCount(count);
+        } catch (e) {
+          console.error(e);
+        }
+      };
+      fetchMessageUnread();
+      // Poll every 30 seconds for messages
+      const interval = setInterval(fetchMessageUnread, 30000);
       return () => clearInterval(interval);
     }
   }, [user]);
@@ -172,16 +230,45 @@ const Navbar: React.FC<{ onLoginClick: () => void }> = ({ onLoginClick }) => {
           </div>
 
           {user ? (
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 md:gap-4">
+              {/* Message Icon */}
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    setShowMessages(!showMessages);
+                    setShowNotifications(false);
+                  }}
+                  className="p-2 md:p-2.5 text-slate-600 hover:bg-slate-100 rounded-full transition-colors relative min-w-[44px] min-h-[44px] flex items-center justify-center"
+                >
+                  <MessageCircle size={20} />
+                  {unreadMessageCount > 0 && (
+                    <span className="absolute top-1 right-1 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                      {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                    </span>
+                  )}
+                </button>
+                {showMessages && (
+                  <MessageDropdown
+                    onClose={() => setShowMessages(false)}
+                    isMobile={isMobile}
+                  />
+                )}
+              </div>
+
               {/* Notification Bell */}
               <div className="relative">
                 <button
-                  onClick={() => setShowNotifications(!showNotifications)}
-                  className="p-2 text-slate-600 hover:bg-slate-100 rounded-full transition-colors relative"
+                  onClick={() => {
+                    setShowNotifications(!showNotifications);
+                    setShowMessages(false);
+                  }}
+                  className="p-2 md:p-2.5 text-slate-600 hover:bg-slate-100 rounded-full transition-colors relative min-w-[44px] min-h-[44px] flex items-center justify-center"
                 >
                   <Bell size={20} />
                   {unreadCount > 0 && (
-                    <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+                    <span className="absolute top-1 right-1 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
                   )}
                 </button>
                 {showNotifications && (
@@ -196,7 +283,7 @@ const Navbar: React.FC<{ onLoginClick: () => void }> = ({ onLoginClick }) => {
               )}
 
               {/* Points Badge */}
-              <div onClick={() => navigate('/pricing')} className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-700 border border-amber-100 rounded-full text-sm font-bold cursor-pointer hover:bg-amber-100 transition">
+              <div onClick={() => navigate('/pricing')} className="hidden md:flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-700 border border-amber-100 rounded-full text-sm font-bold cursor-pointer hover:bg-amber-100 transition">
                 <Wallet size={16} />
                 <span>{user.points} <span className="text-xs opacity-75">{t('nav.points')}</span></span>
               </div>
@@ -232,9 +319,14 @@ const Navbar: React.FC<{ onLoginClick: () => void }> = ({ onLoginClick }) => {
                         navigate('/messages');
                         setShowUserMenu(false);
                       }}
-                      className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 text-slate-700"
+                      className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 text-slate-700 flex items-center justify-between"
                     >
-                      我的私信
+                      <span>我的私信</span>
+                      {unreadMessageCount > 0 && (
+                        <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                          {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                        </span>
+                      )}
                     </button>
                     <button onClick={handleLogout} className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 text-red-600">
                       Logout
