@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, User as UserIcon } from 'lucide-react';
+import ReactDOM from 'react-dom';
+import { X, Send } from 'lucide-react';
 import messageService, { Message } from '../services/messageService';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -21,7 +22,6 @@ const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, recipientId, rec
     useEffect(() => {
         if (isOpen && recipientId) {
             loadMessages();
-            // Poll for new messages every 5 seconds
             const interval = setInterval(loadMessages, 5000);
             return () => clearInterval(interval);
         }
@@ -34,7 +34,6 @@ const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, recipientId, rec
     const loadMessages = async () => {
         try {
             const data = await messageService.getMessages(recipientId);
-            // Sort by created_at ascending for chat view
             const sorted = data.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
             setMessages(sorted);
         } catch (error) {
@@ -64,11 +63,11 @@ const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, recipientId, rec
 
     if (!isOpen) return null;
 
-    return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[80vh] flex flex-col overflow-hidden animate-fade-in-up">
+    const modalContent = (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md h-[500px] flex flex-col overflow-hidden animate-scale-in">
                 {/* Header */}
-                <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white z-10">
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
                     <div className="flex items-center gap-3">
                         <div className="relative">
                             <img
@@ -95,7 +94,7 @@ const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, recipientId, rec
                 <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
                     {messages.length === 0 ? (
                         <div className="text-center py-12 text-slate-400">
-                            <p>Start a conversation with {recipientName}</p>
+                            <p>开始与 {recipientName} 对话</p>
                         </div>
                     ) : (
                         messages.map((msg) => {
@@ -119,7 +118,7 @@ const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, recipientId, rec
                 </div>
 
                 {/* Input Area */}
-                <form onSubmit={handleSend} className="p-4 bg-white border-t border-slate-100">
+                <form onSubmit={handleSend} className="p-4 bg-white border-t border-slate-100 shrink-0">
                     <div className="flex items-center gap-2">
                         <input
                             type="text"
@@ -141,6 +140,9 @@ const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, recipientId, rec
             </div>
         </div>
     );
+
+    // Use React Portal to render at body level
+    return ReactDOM.createPortal(modalContent, document.body);
 };
 
 export default ChatModal;
