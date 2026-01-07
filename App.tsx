@@ -187,7 +187,12 @@ const Navbar: React.FC<{ onLoginClick: () => void }> = ({ onLoginClick }) => {
                     className="p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0 flex gap-3"
                   >
                     <div className="w-10 h-10 bg-slate-100 rounded-lg overflow-hidden flex-shrink-0">
-                      <img src={result.thumbnail_url || `https://picsum.photos/seed/${result.id}/100/100`} alt="" className="w-full h-full object-cover" />
+                      <img
+                        src={result.thumbnail_url?.trim() ? result.thumbnail_url : `https://picsum.photos/seed/${result.id}/100/100`}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).src = `https://picsum.photos/seed/${result.id}/100/100`; }}
+                      />
                     </div>
                     <div className="flex-1 min-w-0">
                       <h4 className="text-sm font-bold text-slate-800 truncate">{result.title}</h4>

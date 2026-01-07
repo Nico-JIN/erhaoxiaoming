@@ -24,6 +24,7 @@ class NotificationResponse(BaseModel):
     content: str
     is_read: bool
     created_at: str
+    actor_id: str | None
     actor_username: str | None
     actor_avatar: str | None
     resource_id: str | None
@@ -91,6 +92,7 @@ async def list_notifications(
             "content": notif.content,
             "is_read": notif.is_read,
             "created_at": format_datetime_with_timezone(notif.created_at),
+            "actor_id": notif.actor_id,
             "actor_username": notif.actor.username if notif.actor else None,
             "actor_avatar": notif.actor.avatar_url if notif.actor else None,
             "resource_id": notif.resource_id,

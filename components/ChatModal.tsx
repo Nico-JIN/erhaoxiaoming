@@ -65,8 +65,8 @@ const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, recipientId, rec
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md h-[600px] flex flex-col overflow-hidden animate-fade-in-up">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[80vh] flex flex-col overflow-hidden animate-fade-in-up">
                 {/* Header */}
                 <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white z-10">
                     <div className="flex items-center gap-3">
@@ -103,8 +103,8 @@ const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, recipientId, rec
                             return (
                                 <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                                     <div className={`max-w-[80%] rounded-2xl px-4 py-3 shadow-sm ${isMe
-                                            ? 'bg-indigo-600 text-white rounded-tr-none'
-                                            : 'bg-white text-slate-800 border border-slate-100 rounded-tl-none'
+                                        ? 'bg-indigo-600 text-white rounded-tr-none'
+                                        : 'bg-white text-slate-800 border border-slate-100 rounded-tl-none'
                                         }`}>
                                         <p className="text-sm">{msg.content}</p>
                                         <p className={`text-[10px] mt-1 ${isMe ? 'text-indigo-200' : 'text-slate-400'}`}>
