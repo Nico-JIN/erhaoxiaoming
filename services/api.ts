@@ -63,7 +63,17 @@ api.interceptors.request.use(
 // Response interceptor - Handle errors
 api.interceptors.response.use(
   (response) => response,
-  async (error: AxiosError) => {
+  async (error: any) => {
+    if (error.config) {
+      console.error(`❌ API 错误 [${error.config.method?.toUpperCase()}] ${error.config.url}:`, {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+    } else {
+      console.error('❌ API 严重错误:', error);
+    }
+
     if (error.response?.status === 401) {
       // Token expired or invalid
       localStorage.removeItem('access_token');

@@ -36,7 +36,8 @@ const notificationService = {
         if (type) {
             params.notification_type = type;
         }
-        const response = await api.get<Notification[]>('/api/notifications', {
+        // Use trailing slash to prevent 307 redirect
+        const response = await api.get<Notification[]>('/api/notifications/', {
             params
         });
         return response.data;

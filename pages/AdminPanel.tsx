@@ -177,43 +177,69 @@ const AdminPanel: React.FC = () => {
   const loadAllData = async () => {
     try {
       setLoading(true);
-      const [dashboard, userList, resourceList, transactionList, categoryList, logsList, paymentQR, plans, orders, visits, visitorLogsData] = await Promise.all([
-        adminService.getStats(),
-        adminService.listAllUsers(),
-        adminService.listResources({ limit: 50 }),
-        pointsService.listAdminTransactions({ limit: 10 }),
-        categoryService.listCategories(),
-        adminService.getLogs({ limit: 100 }),
-        paymentService.getQRCodes(),
-        rechargeService.getPlans(true),
-        rechargeService.getAllOrders().catch(() => []),
-        adminService.getVisitStats().catch(() => null),
-        adminService.getVisitorLogs().catch(() => null),
-      ]);
-      setStats(dashboard);
-      setUsers(userList);
-      setResources(resourceList);
-      setTransactions(transactionList);
-      setCategories(categoryList);
-      setLogs(logsList);
-      setQrCodes(paymentQR);
-      setRechargePlans(plans);
-      setRechargeOrders(orders);
-      setVisitStats(visits);
-      if (visitorLogsData) {
-        setVisitorLogs(visitorLogsData.logs);
-        setVisitorLogsTotal(visitorLogsData.total);
-      }
+      console.log('🏁 开始加载管理后台数据...');
 
-      // Load notifications
-      const notifStats = await notificationService.getStats(false);
-      setNotificationStats(notifStats);
-      const notifList = await notificationService.getNotifications(0, 20, activeFilter || undefined);
-      setNotifications(notifList);
-      const unread = await notificationService.getUnreadCount();
-      setUnreadCount(unread);
+      // 1. 独立加载通知数据 (重要)
+      const loadNotifications = async () => {
+        try {
+          console.log('🔔 正在加载通知...');
+          const [notifStats, notifList, unread] = await Promise.all([
+            notificationService.getStats(false).catch(e => { console.error('通知统计失败:', e); return null; }),
+            notificationService.getNotifications(0, 20, activeFilter || undefined).catch(e => { console.error('通知列表失败:', e); return []; }),
+            notificationService.getUnreadCount().catch(e => { console.error('未读数失败:', e); return 0; })
+          ]);
+          setNotificationStats(notifStats);
+          setNotifications(notifList);
+          setUnreadCount(unread);
+          console.log('✅ 通知加载完成:', notifList.length, '条');
+        } catch (e) {
+          console.error('通知模块加载严重错误:', e);
+        }
+      };
+
+      // 2. 加载基础统计和其他数据
+      const loadMainStats = async () => {
+        try {
+          console.log('📊 正在加载主统计数据...');
+          const [dashboard, userList, resourceList, transactionList, categoryList, logsList, paymentQR, plans, orders, visits, visitorLogsData] = await Promise.all([
+            adminService.getStats().catch(e => { console.error('Dashboard统计失败:', e); return null; }),
+            adminService.listAllUsers().catch(e => { console.error('用户列表失败:', e); return []; }),
+            adminService.listResources({ limit: 50 }).catch(e => { console.error('资源列表失败:', e); return []; }),
+            pointsService.listAdminTransactions({ limit: 10 }).catch(e => { console.error('交易列表失败:', e); return []; }),
+            categoryService.listCategories().catch(e => { console.error('分类列表失败:', e); return []; }),
+            adminService.getLogs({ limit: 100 }).catch(e => { console.error('日志列表失败:', e); return []; }),
+            paymentService.getQRCodes().catch(e => { console.error('收款码获取失败:', e); return []; }),
+            rechargeService.getPlans(true).catch(e => { console.error('充值方案失败:', e); return []; }),
+            rechargeService.getAllOrders().catch(e => { console.error('充值订单失败:', e); return []; }),
+            adminService.getVisitStats().catch(e => { console.error('访问统计失败:', e); return null; }),
+            adminService.getVisitorLogs().catch(e => { console.error('访问日志失败:', e); return null; }),
+          ]);
+
+          if (dashboard) setStats(dashboard);
+          setUsers(userList);
+          setResources(resourceList);
+          setTransactions(transactionList);
+          setCategories(categoryList);
+          setLogs(logsList);
+          setQrCodes(paymentQR);
+          setRechargePlans(plans);
+          setRechargeOrders(orders);
+          setVisitStats(visits);
+          if (visitorLogsData) {
+            setVisitorLogs(visitorLogsData.logs);
+            setVisitorLogsTotal(visitorLogsData.total);
+          }
+          console.log('✅ 主统计数据加载完成');
+        } catch (e) {
+          console.error('主数据模块加载严重错误:', e);
+        }
+      };
+
+      // 并行执行两组加载
+      await Promise.all([loadNotifications(), loadMainStats()]);
+
     } catch (error) {
-      console.error('Failed to load admin data', error);
+      console.error('加载管理数据时发生未知错误:', error);
       setMessage(t('admin.loadError'));
     } finally {
       setLoading(false);
@@ -1444,8 +1470,8 @@ const AdminPanel: React.FC = () => {
               key={tab.key || 'all'}
               onClick={() => handleFilterClick(tab.key)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${activeFilter === tab.key
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                ? 'bg-indigo-600 text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
             >
               <tab.icon size={14} />

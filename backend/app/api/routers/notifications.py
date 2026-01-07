@@ -66,7 +66,9 @@ async def get_notification_stats(
     return notification_service.get_stats(db, current_user.id, unread_only)
 
 
+# Accept both with and without trailing slash
 @router.get("/", response_model=List[NotificationResponse])
+@router.get("", response_model=List[NotificationResponse], include_in_schema=False)
 async def list_notifications(
     skip: int = 0,
     limit: int = 20,
