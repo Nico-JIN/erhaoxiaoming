@@ -12,7 +12,7 @@ from backend.app.db.session import get_db
 from backend.app.models import (
     User, UserRole, EmailTemplate, EmailLog, ScheduledEmail, EmailStatus
 )
-from backend.app.api.routers.auth import get_current_user
+from backend.app.core.security import get_current_user
 from backend.app.services.gmail_service import gmail_service
 from backend.app.services.scheduler import email_scheduler
 
