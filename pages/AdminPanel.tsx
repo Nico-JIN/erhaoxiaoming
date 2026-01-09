@@ -2206,32 +2206,28 @@ const AdminPanel: React.FC = () => {
           </div>
         </div>
 
-        {/* Template Form Modal */}
+        {/* Template Form Modal - Simplified */}
         {showTemplateForm && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-lg">
               <h3 className="text-xl font-bold text-slate-800 mb-4">{editingTemplate ? '编辑模版' : '新建模版'}</h3>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">模版名称</label>
                   <input type="text" value={templateForm.name} onChange={e => setTemplateForm({ ...templateForm, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg" placeholder="如：欢迎邮件" />
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg" placeholder="如：活动通知" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">邮件主题</label>
                   <input type="text" value={templateForm.subject} onChange={e => setTemplateForm({ ...templateForm, subject: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg" placeholder="支持变量如 {{`{`}{`{`}username{`}`}{`}`}}" />
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg" placeholder="如：重要通知" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">邮件正文 (HTML)</label>
-                  <textarea rows={6} value={templateForm.body} onChange={e => setTemplateForm({ ...templateForm, body: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-sm"
-                    placeholder="<p>尊敬的 {{username}}：</p><p>感谢您的支持！</p>" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">可用变量 (逗号分隔)</label>
-                  <input type="text" value={templateForm.variables} onChange={e => setTemplateForm({ ...templateForm, variables: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg" placeholder="username, email, full_name" />
+                  <label className="block text-sm font-medium text-slate-700 mb-1">邮件内容</label>
+                  <textarea rows={5} value={templateForm.body} onChange={e => setTemplateForm({ ...templateForm, body: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                    placeholder="输入邮件内容，可使用 {{username}} {{email}} 等变量" />
+                  <p className="text-xs text-slate-400 mt-1">支持的变量：{'{{username}}'} {'{{email}}'} {'{{full_name}}'}</p>
                 </div>
               </div>
               <div className="flex gap-2 mt-6">
