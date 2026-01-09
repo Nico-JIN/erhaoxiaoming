@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     WECHAT_APP_SECRET: str = ""
     WECHAT_REDIRECT_URI: str = ""
 
+    # Gmail API (管理员发送邮件)
+    GMAIL_ENABLED: bool = False  # 是否启用Gmail发送功能
+    GMAIL_ADMIN_REFRESH_TOKEN: str = ""  # 管理员Gmail refresh token
+
     # MinIO
     MINIO_ENDPOINT: str = "localhost:9000"
     MINIO_ACCESS_KEY: str = "minioadmin"

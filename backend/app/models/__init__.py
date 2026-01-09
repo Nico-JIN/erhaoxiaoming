@@ -460,3 +460,78 @@ class Message(Base):
 
     sender = relationship("User", foreign_keys=[sender_id])
     receiver = relationship("User", foreign_keys=[receiver_id])
+
+
+class EmailStatus(str, enum.Enum):
+    """邮件发送状态"""
+    PENDING = "PENDING"
+    SENT = "SENT"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class EmailTemplate(Base):
+    """邮件模版表"""
+    __tablename__ = "email_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), unique=True, index=True)  # 模版名称
+    subject = Column(String(500))  # 邮件主题
+    body = Column(Text)  # 邮件正文（支持HTML）
+    variables = Column(Text, nullable=True)  # JSON: 可用变量列表 ["username", "email"]
+    
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class EmailLog(Base):
+    """邮件发送记录表"""
+    __tablename__ = "email_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    template_id = Column(Integer, ForeignKey("email_templates.id"), nullable=True, index=True)
+    sender_id = Column(CHAR(32), ForeignKey("users.id"), index=True)  # 发送者（管理员）
+    
+    recipient_email = Column(String(255), index=True)
+    recipient_user_id = Column(CHAR(32), ForeignKey("users.id"), nullable=True, index=True)
+    
+    subject = Column(String(500))
+    body = Column(Text)
+    
+    status = Column(Enum(EmailStatus), default=EmailStatus.PENDING, index=True)
+    error_message = Column(Text, nullable=True)
+    
+    sent_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    template = relationship("EmailTemplate")
+    sender = relationship("User", foreign_keys=[sender_id])
+    recipient = relationship("User", foreign_keys=[recipient_user_id])
+
+
+class ScheduledEmail(Base):
+    """定时邮件任务表"""
+    __tablename__ = "scheduled_emails"
+
+    id = Column(Integer, primary_key=True, index=True)
+    template_id = Column(Integer, ForeignKey("email_templates.id"), index=True)
+    sender_id = Column(CHAR(32), ForeignKey("users.id"), index=True)
+    
+    # 收件人配置: JSON格式
+    # {"type": "all"} 或 {"type": "role", "role": "VIP"} 或 {"type": "users", "user_ids": [...]}
+    recipient_config = Column(Text)
+    
+    subject = Column(String(500))  # 可覆盖模版主题
+    body = Column(Text, nullable=True)  # 可覆盖模版正文
+    
+    scheduled_at = Column(DateTime(timezone=True), index=True)  # 计划发送时间
+    status = Column(Enum(EmailStatus), default=EmailStatus.PENDING, index=True)
+    
+    executed_at = Column(DateTime(timezone=True), nullable=True)
+    error_message = Column(Text, nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    template = relationship("EmailTemplate")
+    sender = relationship("User", foreign_keys=[sender_id])

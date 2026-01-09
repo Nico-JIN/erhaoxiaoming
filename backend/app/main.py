@@ -10,6 +10,7 @@ from backend.app.core.config import get_settings
 from backend.app.db.session import SessionLocal, init_db
 from backend.app.models import Resource, User
 from backend.app.middleware import RateLimitMiddleware, IPBlocklistMiddleware
+from backend.app.services.scheduler import email_scheduler
 from backend.init_db import seed_data
 
 
@@ -72,14 +73,25 @@ def seed_if_needed() -> None:
 
 @app.on_event("startup")
 async def startup_event() -> None:
-    """Initialize database on startup."""
+    """Initialize database and services on startup."""
 
     try:
         init_db()
         seed_if_needed()
         print("✓ Database initialized successfully")
+        
+        # Start email scheduler
+        if settings.GMAIL_ENABLED:
+            email_scheduler.start()
+            print("✓ Email scheduler started")
     except Exception as exc:  # pragma: no cover
-        print(f"✗ Error initializing database: {exc}")
+        print(f"✗ Error initializing: {exc}")
+
+
+@app.on_event("shutdown")
+async def shutdown_event() -> None:
+    """Cleanup on shutdown."""
+    email_scheduler.shutdown()
 
 
 @app.get("/")

@@ -23,6 +23,11 @@ import {
   Eye,
   MessageCircle,
   X,
+  Mail,
+  Send,
+  Clock,
+  Trash2,
+  Edit,
 } from 'lucide-react';
 import notificationService, { Notification, NotificationStats } from '../services/notificationService';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -37,8 +42,9 @@ import ImageCropper from '../components/ImageCropper';
 import NotificationSound from '../components/NotificationSound';
 import rechargeService, { RechargePlan, RechargeOrder } from '../services/rechargeService';
 import adminService, { DashboardStats, OperationLog, UserManagement, VisitStats, VisitorLog } from '../services/adminService';
+import emailService, { EmailTemplate, EmailLog, ScheduledEmail, EmailUser } from '../services/emailService';
 
-type AdminTab = 'dashboard' | 'users' | 'content' | 'finance' | 'categories' | 'payment' | 'logs' | 'analytics' | 'notifications';
+type AdminTab = 'dashboard' | 'users' | 'content' | 'finance' | 'categories' | 'payment' | 'logs' | 'analytics' | 'notifications' | 'email';
 
 const AdminPanel: React.FC = () => {
   const { t } = useLanguage();
@@ -53,6 +59,7 @@ const AdminPanel: React.FC = () => {
     logs: t('admin.tabTitles.logs'),
     analytics: 'Analytics',
     notifications: '消息通知',
+    email: '邮件推送',
   };
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -130,6 +137,26 @@ const AdminPanel: React.FC = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notificationStats, setNotificationStats] = useState<NotificationStats | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // Email State
+  const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([]);
+  const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]);
+  const [scheduledEmails, setScheduledEmails] = useState<ScheduledEmail[]>([]);
+  const [emailUsers, setEmailUsers] = useState<EmailUser[]>([]);
+  const [showTemplateForm, setShowTemplateForm] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null);
+  const [templateForm, setTemplateForm] = useState({ name: '', subject: '', body: '', variables: '' });
+  const [showSendForm, setShowSendForm] = useState(false);
+  const [sendForm, setSendForm] = useState({
+    template_id: 0,
+    subject: '',
+    body: '',
+    recipientType: 'all' as 'all' | 'role' | 'users',
+    role: 'USER',
+    selectedUserIds: [] as string[],
+    scheduledAt: '',
+  });
+  const [emailLoading, setEmailLoading] = useState(false);
 
   const slugify = (value: string) =>
     value
@@ -1947,6 +1974,359 @@ const AdminPanel: React.FC = () => {
     </div>
   );
 
+  // Email Tab Functions
+  const loadEmailData = async () => {
+    try {
+      setEmailLoading(true);
+      const [templates, logs, scheduled, users] = await Promise.all([
+        emailService.listTemplates(),
+        emailService.getEmailHistory({ limit: 50 }),
+        emailService.getScheduledEmails(),
+        emailService.getUsersForEmail()
+      ]);
+      setEmailTemplates(templates);
+      setEmailLogs(logs);
+      setScheduledEmails(scheduled);
+      setEmailUsers(users);
+    } catch (error) {
+      console.error('Failed to load email data:', error);
+      setMessage('加载邮件数据失败');
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  const handleSaveTemplate = async () => {
+    try {
+      const data = {
+        name: templateForm.name,
+        subject: templateForm.subject,
+        body: templateForm.body,
+        variables: templateForm.variables ? templateForm.variables.split(',').map(v => v.trim()) : undefined
+      };
+      if (editingTemplate) {
+        await emailService.updateTemplate(editingTemplate.id, data);
+        setMessage('模版更新成功');
+      } else {
+        await emailService.createTemplate(data);
+        setMessage('模版创建成功');
+      }
+      setShowTemplateForm(false);
+      setEditingTemplate(null);
+      setTemplateForm({ name: '', subject: '', body: '', variables: '' });
+      loadEmailData();
+    } catch (error) {
+      console.error('Failed to save template:', error);
+      setMessage('保存模版失败');
+    }
+  };
+
+  const handleDeleteTemplate = async (id: number) => {
+    if (!confirm('确定要删除这个模版吗？')) return;
+    try {
+      await emailService.deleteTemplate(id);
+      setMessage('模版已删除');
+      loadEmailData();
+    } catch (error) {
+      setMessage('删除失败');
+    }
+  };
+
+  const handleSendEmail = async (scheduled: boolean) => {
+    try {
+      setEmailLoading(true);
+      const recipients: { type: 'all' | 'role' | 'users'; role?: string; user_ids?: string[] } = {
+        type: sendForm.recipientType
+      };
+      if (sendForm.recipientType === 'role') {
+        recipients.role = sendForm.role;
+      } else if (sendForm.recipientType === 'users') {
+        recipients.user_ids = sendForm.selectedUserIds;
+      }
+
+      if (scheduled && sendForm.scheduledAt) {
+        await emailService.scheduleEmail({
+          template_id: sendForm.template_id || undefined,
+          subject: sendForm.subject,
+          body: sendForm.body,
+          recipients,
+          scheduled_at: new Date(sendForm.scheduledAt).toISOString()
+        });
+        setMessage('邮件已安排定时发送');
+      } else {
+        const result = await emailService.sendEmail({
+          template_id: sendForm.template_id || undefined,
+          subject: sendForm.subject,
+          body: sendForm.body,
+          recipients
+        });
+        setMessage(`发送完成: ${result.sent} 成功, ${result.failed} 失败`);
+      }
+      setShowSendForm(false);
+      loadEmailData();
+    } catch (error) {
+      console.error('Failed to send email:', error);
+      setMessage('发送邮件失败');
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  const handleCancelScheduled = async (id: number) => {
+    try {
+      await emailService.cancelScheduledEmail(id);
+      setMessage('定时任务已取消');
+      loadEmailData();
+    } catch (error) {
+      setMessage('取消失败');
+    }
+  };
+
+  const renderEmailTab = () => {
+    // Load data on first render
+    if (emailTemplates.length === 0 && !emailLoading) {
+      loadEmailData();
+    }
+
+    return (
+      <div className="space-y-6 animate-fade-in">
+        {/* Action Buttons */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold text-slate-800">邮件推送管理</h2>
+          <div className="flex gap-3">
+            <button
+              onClick={() => { setShowTemplateForm(true); setEditingTemplate(null); setTemplateForm({ name: '', subject: '', body: '', variables: '' }); }}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
+            >
+              <Plus size={16} /> 新建模版
+            </button>
+            <button
+              onClick={() => setShowSendForm(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+            >
+              <Send size={16} /> 发送邮件
+            </button>
+          </div>
+        </div>
+
+        {/* Templates Section */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+          <div className="px-6 py-4 border-b border-slate-100">
+            <h3 className="font-bold text-slate-800">邮件模版</h3>
+          </div>
+          <div className="p-6">
+            {emailTemplates.length === 0 ? (
+              <p className="text-center text-slate-400 py-8">暂无模版，点击"新建模版"创建</p>
+            ) : (
+              <div className="grid gap-4">
+                {emailTemplates.map(t => (
+                  <div key={t.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg">
+                    <div>
+                      <h4 className="font-medium text-slate-800">{t.name}</h4>
+                      <p className="text-sm text-slate-500">{t.subject}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => { setEditingTemplate(t); setTemplateForm({ name: t.name, subject: t.subject, body: t.body, variables: t.variables?.join(', ') || '' }); setShowTemplateForm(true); }}
+                        className="p-2 text-slate-400 hover:text-indigo-600"><Edit size={16} /></button>
+                      <button onClick={() => handleDeleteTemplate(t.id)}
+                        className="p-2 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Scheduled Emails */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+          <div className="px-6 py-4 border-b border-slate-100">
+            <h3 className="font-bold text-slate-800">定时任务</h3>
+          </div>
+          <div className="p-6">
+            {scheduledEmails.filter(s => s.status === 'PENDING').length === 0 ? (
+              <p className="text-center text-slate-400 py-4">暂无待发送的定时任务</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-4 py-2 text-left">主题</th>
+                    <th className="px-4 py-2 text-left">计划时间</th>
+                    <th className="px-4 py-2 text-left">状态</th>
+                    <th className="px-4 py-2 text-left">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {scheduledEmails.filter(s => s.status === 'PENDING').map(s => (
+                    <tr key={s.id} className="border-t border-slate-100">
+                      <td className="px-4 py-2">{s.subject}</td>
+                      <td className="px-4 py-2">{new Date(s.scheduled_at).toLocaleString('zh-CN')}</td>
+                      <td className="px-4 py-2"><span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded">待发送</span></td>
+                      <td className="px-4 py-2">
+                        <button onClick={() => handleCancelScheduled(s.id)} className="text-red-600 hover:underline text-xs">取消</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+
+        {/* Email History */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+          <div className="px-6 py-4 border-b border-slate-100">
+            <h3 className="font-bold text-slate-800">发送历史</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-4 py-2 text-left">收件人</th>
+                  <th className="px-4 py-2 text-left">主题</th>
+                  <th className="px-4 py-2 text-left">状态</th>
+                  <th className="px-4 py-2 text-left">发送时间</th>
+                </tr>
+              </thead>
+              <tbody>
+                {emailLogs.slice(0, 20).map(log => (
+                  <tr key={log.id} className="border-t border-slate-100">
+                    <td className="px-4 py-2">{log.recipient_email}</td>
+                    <td className="px-4 py-2">{log.subject}</td>
+                    <td className="px-4 py-2">
+                      <span className={`px-2 py-1 text-xs rounded ${log.status === 'SENT' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {log.status === 'SENT' ? '已发送' : '失败'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-slate-500">{log.sent_at ? new Date(log.sent_at).toLocaleString('zh-CN') : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Template Form Modal */}
+        {showTemplateForm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+              <h3 className="text-xl font-bold text-slate-800 mb-4">{editingTemplate ? '编辑模版' : '新建模版'}</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">模版名称</label>
+                  <input type="text" value={templateForm.name} onChange={e => setTemplateForm({ ...templateForm, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg" placeholder="如：欢迎邮件" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">邮件主题</label>
+                  <input type="text" value={templateForm.subject} onChange={e => setTemplateForm({ ...templateForm, subject: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg" placeholder="支持变量如 {{`{`}{`{`}username{`}`}{`}`}}" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">邮件正文 (HTML)</label>
+                  <textarea rows={6} value={templateForm.body} onChange={e => setTemplateForm({ ...templateForm, body: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-sm"
+                    placeholder="<p>尊敬的 {{username}}：</p><p>感谢您的支持！</p>" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">可用变量 (逗号分隔)</label>
+                  <input type="text" value={templateForm.variables} onChange={e => setTemplateForm({ ...templateForm, variables: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg" placeholder="username, email, full_name" />
+                </div>
+              </div>
+              <div className="flex gap-2 mt-6">
+                <button onClick={() => setShowTemplateForm(false)} className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50">取消</button>
+                <button onClick={handleSaveTemplate} className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">保存</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Send Email Modal */}
+        {showSendForm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+              <h3 className="text-xl font-bold text-slate-800 mb-4">发送邮件</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">选择模版 (可选)</label>
+                  <select value={sendForm.template_id} onChange={e => {
+                    const tid = parseInt(e.target.value);
+                    setSendForm({ ...sendForm, template_id: tid });
+                    const t = emailTemplates.find(t => t.id === tid);
+                    if (t) setSendForm(prev => ({ ...prev, subject: t.subject, body: t.body }));
+                  }} className="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    <option value={0}>不使用模版</option>
+                    {emailTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">邮件主题</label>
+                  <input type="text" value={sendForm.subject} onChange={e => setSendForm({ ...sendForm, subject: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">邮件正文</label>
+                  <textarea rows={4} value={sendForm.body} onChange={e => setSendForm({ ...sendForm, body: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">收件人</label>
+                  <select value={sendForm.recipientType} onChange={e => setSendForm({ ...sendForm, recipientType: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    <option value="all">全部用户</option>
+                    <option value="role">按角色</option>
+                    <option value="users">指定用户</option>
+                  </select>
+                </div>
+                {sendForm.recipientType === 'role' && (
+                  <select value={sendForm.role} onChange={e => setSendForm({ ...sendForm, role: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    <option value="USER">普通用户</option>
+                    <option value="VIP">VIP</option>
+                    <option value="ADMIN">管理员</option>
+                  </select>
+                )}
+                {sendForm.recipientType === 'users' && (
+                  <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-lg p-2">
+                    {emailUsers.map(u => (
+                      <label key={u.id} className="flex items-center gap-2 py-1 cursor-pointer hover:bg-slate-50 px-2 rounded">
+                        <input type="checkbox" checked={sendForm.selectedUserIds.includes(u.id)}
+                          onChange={e => {
+                            if (e.target.checked) setSendForm({ ...sendForm, selectedUserIds: [...sendForm.selectedUserIds, u.id] });
+                            else setSendForm({ ...sendForm, selectedUserIds: sendForm.selectedUserIds.filter(id => id !== u.id) });
+                          }} />
+                        <span className="text-sm">{u.username} ({u.email})</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">定时发送 (可选)</label>
+                  <input type="datetime-local" value={sendForm.scheduledAt} onChange={e => setSendForm({ ...sendForm, scheduledAt: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+                </div>
+              </div>
+              <div className="flex gap-2 mt-6">
+                <button onClick={() => setShowSendForm(false)} className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50">取消</button>
+                {sendForm.scheduledAt && (
+                  <button onClick={() => handleSendEmail(true)} disabled={emailLoading}
+                    className="flex-1 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center justify-center gap-2">
+                    <Clock size={16} /> 定时发送
+                  </button>
+                )}
+                <button onClick={() => handleSendEmail(false)} disabled={emailLoading}
+                  className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center justify-center gap-2">
+                  <Send size={16} /> 立即发送
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
@@ -2049,6 +2429,8 @@ const AdminPanel: React.FC = () => {
         );
       case 'notifications':
         return renderNotifications();
+      case 'email':
+        return renderEmailTab();
       default:
         return <div className="p-12 text-center text-slate-400">{t('admin.comingSoon')}</div>;
     }
@@ -2137,6 +2519,7 @@ const AdminPanel: React.FC = () => {
               <SidebarItem id="notifications" icon={Bell} label={tabTitles.notifications} badge={unreadCount} />
             </div>
             <SidebarItem id="logs" icon={Activity} label={t('admin.logs')} />
+            <SidebarItem id="email" icon={Mail} label={tabTitles.email} />
           </div>
         </div>
 

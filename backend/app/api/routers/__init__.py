@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 
-from . import admin, auth, categories, insights, interactions, payment, points, recharge, resources, uploads, users, search, analytics, notifications, messages
+from . import admin, auth, categories, insights, interactions, payment, points, recharge, resources, uploads, users, search, analytics, notifications, messages, email
 
 
 ALL_ROUTERS = [
@@ -21,6 +21,7 @@ ALL_ROUTERS = [
     analytics.router,
     notifications.router,
     messages.router,
+    email.router,
 ]
 
 
