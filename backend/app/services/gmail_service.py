@@ -52,6 +52,7 @@ class GmailService:
                 return self._access_token
         
         try:
+            print(f"[Gmail] Refreshing token with client_id: {self.client_id[:20]}...")
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
                     GMAIL_TOKEN_URL,
@@ -64,7 +65,7 @@ class GmailService:
                 )
                 
                 if response.status_code != 200:
-                    print(f"[Gmail] Token refresh failed: {response.text}")
+                    print(f"[Gmail] Token refresh failed (status {response.status_code}): {response.text}")
                     return None
                 
                 data = response.json()
@@ -75,8 +76,16 @@ class GmailService:
                 print(f"[Gmail] Access token refreshed, expires in {expires_in}s")
                 return self._access_token
                 
+        except httpx.ConnectError as e:
+            print(f"[Gmail] Network connection error (可能需要代理): {e}")
+            return None
+        except httpx.TimeoutException as e:
+            print(f"[Gmail] Request timeout (网络超时): {e}")
+            return None
         except Exception as e:
-            print(f"[Gmail] Error refreshing token: {e}")
+            import traceback
+            print(f"[Gmail] Error refreshing token: {type(e).__name__}: {e}")
+            traceback.print_exc()
             return None
     
     def _create_message(

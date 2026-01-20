@@ -259,7 +259,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           </div>
 
           {/* Social Login Grid */}
-          <div className="grid grid-cols-2 gap-3 mb-6">
+          <div className="grid grid-cols-4 gap-3 mb-6">
             <button
               type="button"
               onClick={() => handleOAuthLogin('google')}
@@ -293,7 +293,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 </svg>
               )}
             </button>
-            {/* 
             <button
               type="button"
               onClick={() => handleOAuthLogin('wechat')}
@@ -324,7 +323,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 </svg>
               )}
             </button>
-            */}
           </div>
 
           <div className="mt-6 text-center">
