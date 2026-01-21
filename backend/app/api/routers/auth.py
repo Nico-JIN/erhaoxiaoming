@@ -410,7 +410,7 @@ async def check_wechat_mp_status(session_id: str, db: Session = Depends(get_db))
     return {"status": "pending"}
 
 
-@router.all("/wechat-mp/webhook")
+@router.get("/wechat-mp/webhook")
 async def wechat_mp_webhook(request: Request, db: Session = Depends(get_db)):
     """Handle WeChat Official Account webhooks."""
     params = request.query_params
