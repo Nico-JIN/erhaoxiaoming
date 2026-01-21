@@ -20,6 +20,11 @@ from backend.app.schemas import OAuthLogin, Token, UserCreate, UserLogin, UserRe
 from backend.app.services.operations import log_operation
 from backend.app.services.points import grant_register_reward
 from backend.app.services.oauth import qq_oauth, wechat_oauth, google_oauth, github_oauth
+from backend.app.services.wechat_mp import wechat_mp_service
+from backend.app.models import WeChatLoginSession
+from fastapi.responses import Response
+import random
+from datetime import timedelta
 
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
@@ -331,11 +336,133 @@ async def oauth_callback(
         return RedirectResponse(url=frontend_url)
 
 
-@router.post("/refresh", response_model=Token)
-async def refresh_token(refresh_token: str, db: Session = Depends(get_db)):
-    """Placeholder for refresh token flow."""
-
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Refresh token not yet implemented",
+@router.get("/wechat-mp/code")
+async def get_wechat_mp_code(db: Session = Depends(get_db)):
+    """Generate a 6-digit code for WeChat MP 'follow-to-login' flow."""
+    code = f"{random.randint(100000, 999999)}"
+    session = WeChatLoginSession(
+        code=code,
+        expires_at=datetime.utcnow() + timedelta(minutes=10)
     )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return {"code": code, "session_id": session.id}
+
+
+@router.get("/wechat-mp/status/{session_id}")
+async def check_wechat_mp_status(session_id: str, db: Session = Depends(get_db)):
+    """Check if the user has replied with the code in WeChat."""
+    session = db.query(WeChatLoginSession).filter(
+        WeChatLoginSession.id == session_id,
+        WeChatLoginSession.is_used == False,
+        WeChatLoginSession.expires_at > datetime.utcnow()
+    ).first()
+    
+    if not session:
+        return {"status": "expired"}
+    
+    if session.openid:
+        # User has replied with code! Log them in.
+        # Check if user exists
+        oauth_account = db.query(OAuthAccount).filter(
+            OAuthAccount.provider == OAuthProvider.WECHAT,
+            OAuthAccount.provider_user_id == session.openid
+        ).first()
+        
+        if oauth_account:
+            user = oauth_account.user
+        else:
+            # Create new user
+            username = f"wx_{session.openid[:8]}"
+            user = User(
+                username=username,
+                full_name=username,
+                role=UserRole.USER,
+                points=0
+            )
+            db.add(user)
+            db.flush()
+            
+            oauth_account = OAuthAccount(
+                user_id=user.id,
+                provider=OAuthProvider.WECHAT,
+                provider_user_id=session.openid
+            )
+            db.add(oauth_account)
+            db.commit()
+            grant_register_reward(db, user)
+        
+        user.last_login = datetime.utcnow()
+        session.is_used = True
+        db.commit()
+        
+        access_token = create_access_token(data={"sub": user.id})
+        refresh_token = create_refresh_token(data={"sub": user.id})
+        
+        return {
+            "status": "success",
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer"
+        }
+    
+    return {"status": "pending"}
+
+
+@router.all("/wechat-mp/webhook")
+async def wechat_mp_webhook(request: Request, db: Session = Depends(get_db)):
+    """Handle WeChat Official Account webhooks."""
+    params = request.query_params
+    signature = params.get("signature")
+    timestamp = params.get("timestamp")
+    nonce = params.get("nonce")
+    echostr = params.get("echostr")
+    
+    # 1. Verify signature
+    if not wechat_mp_service.check_signature(signature, timestamp, nonce):
+        raise HTTPException(status_code=403, detail="Invalid signature")
+    
+    # 2. Handle server verification (GET request)
+    if request.method == "GET":
+        return Response(content=echostr)
+    
+    # 3. Handle messages (POST request)
+    body = await request.body()
+    msg = wechat_mp_service.parse_xml(body.decode('utf-8'))
+    
+    msg_type = msg.get("MsgType")
+    from_user = msg.get("FromUserName")  # User OpenID
+    to_user = msg.get("ToUserName")      # App ID
+    
+    if msg_type == "text":
+        content = msg.get("Content", "").strip()
+        # Find session with this code
+        session = db.query(WeChatLoginSession).filter(
+            WeChatLoginSession.code == content,
+            WeChatLoginSession.is_used == False,
+            WeChatLoginSession.expires_at > datetime.utcnow()
+        ).first()
+        
+        if session:
+            session.openid = from_user
+            db.commit()
+            reply = "登录成功！请回到网页查看。"
+        else:
+            reply = "验证码无效或已过期，请刷新网页重试。"
+            
+        return Response(
+            content=wechat_mp_service.build_text_response(from_user, to_user, reply),
+            media_type="application/xml"
+        )
+    
+    elif msg_type == "event":
+        event = msg.get("Event")
+        if event == "subscribe":
+            reply = "欢迎关注！如果您正在登录，请在下方回复网页上显示的6位验证码进行登录。"
+            return Response(
+                content=wechat_mp_service.build_text_response(from_user, to_user, reply),
+                media_type="application/xml"
+            )
+
+    return Response(content="success")

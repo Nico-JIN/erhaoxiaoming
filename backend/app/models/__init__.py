@@ -535,3 +535,18 @@ class ScheduledEmail(Base):
 
     template = relationship("EmailTemplate")
     sender = relationship("User", foreign_keys=[sender_id])
+
+
+class WeChatLoginSession(Base):
+    """Temporary session for WeChat MP 'follow-to-login' flow."""
+    __tablename__ = "wechat_login_sessions"
+
+    id = Column(CHAR(32), primary_key=True, default=generate_uuid, index=True)
+    code = Column(String(10), index=True)  # The 6-digit code shown to user
+    openid = Column(String(128), nullable=True)  # Filled once user sends the code
+    
+    is_used = Column(Boolean, default=False)
+    expires_at = Column(DateTime(timezone=True))
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())

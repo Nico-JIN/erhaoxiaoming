@@ -155,6 +155,20 @@ class AuthService {
       }, 500);
     });
   }
+
+  async getWeChatMPCode(): Promise<{ code: string; session_id: string }> {
+    const response = await api.get('/api/auth/wechat-mp/code');
+    return response.data;
+  }
+
+  async checkWeChatMPStatus(sessionId: string): Promise<any> {
+    const response = await api.get(`/api/auth/wechat-mp/status/${sessionId}`);
+    if (response.data.status === 'success' && response.data.access_token) {
+      localStorage.setItem('access_token', response.data.access_token);
+      localStorage.setItem('refresh_token', response.data.refresh_token);
+    }
+    return response.data;
+  }
 }
 
 export default new AuthService();
