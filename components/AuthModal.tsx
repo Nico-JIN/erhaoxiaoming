@@ -262,6 +262,40 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           <div className="grid grid-cols-4 gap-3 mb-6">
             <button
               type="button"
+              onClick={() => handleOAuthLogin('qq')}
+              disabled={oauthLoading !== null}
+              className="flex items-center justify-center p-3 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              title="QQ登录"
+            >
+              {oauthLoading === 'qq' ? (
+                <div className="animate-spin h-5 w-5 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+              ) : (
+                <svg className="w-5 h-5" viewBox="0 0 1024 1024">
+                  <path d="M824.8 613.2c-16-19.6-56.4-53.1-71.2-61.9-8.4-5-11.3-15.3-7.1-24.3 22.2-46.7 33.7-96.6 33.7-147 0-184.2-132.8-333.5-296.7-333.5C319.7 46.5 186.9 195.8 186.9 380c0 50.4 11.5 100.3 33.7 147 4.2 9 1.3 19.3-7.1 24.3-14.7 8.8-55.2 42.4-71.2 61.9-46 56.4-60.8 141.2-40.4 186.9 18.2 40.8 84.4 69.2 195.1 69.2 11.2 0 22.8-0.3 34.7-0.9l20.4 90.1c1.2 5.1 6.8 8.1 11.7 6.3l124.9-46.2V917c0 5.8 4.7 10.5 10.5 10.5s10.5-4.7 10.5-10.5v0.6l124.9 46.2c4.9 1.8 10.5-1.2 11.7-6.3l20.4-90.1c11.9 0.6 23.5 0.9 34.7 0.9 110.7 0 176.9-28.4 195.1-69.2 20.4-45.7 5.6-130.5-40.4-186.9z" fill="#12B7F5"></path>
+                  <path d="M386 332.7c-21.7 0-39.3 17.6-39.3 39.3 0 21.7 17.6 39.3 39.3 39.3s39.3-17.6 39.3-39.3c0-21.7-17.5-39.3-39.3-39.3z" fill="#FFF"></path>
+                  <path d="M638 332.7c-21.7 0-39.3 17.6-39.3 39.3 0 21.7 17.6 39.3 39.3 39.3s39.3-17.6 39.3-39.3c0-21.7-17.6-39.3-39.3-39.3z" fill="#FFF"></path>
+                  <path d="M512 605c-75.1 0-136 60.9-136 136s60.9 136 136 136 136-60.9 136-136-60.9-136-136-136z" fill="#FFD500"></path>
+                  <path d="M512 700c-22.1 0-40 17.9-40 40h80c0-22.1-17.9-40-40-40z" fill="#FF4B2B"></path>
+                </svg>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleOAuthLogin('wechat')}
+              disabled={oauthLoading !== null}
+              className="flex items-center justify-center p-3 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              title="微信登录"
+            >
+              {oauthLoading === 'wechat' ? (
+                <div className="animate-spin h-5 w-5 border-2 border-green-600 border-t-transparent rounded-full"></div>
+              ) : (
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <path fill="#07C160" d="M8.5 10.5c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1zm7 0c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1zM12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm-2.5 14.5c-.276 0-.5-.224-.5-.5 0-.276.224-.5.5-.5.276 0 .5.224.5.5 0 .276-.224.5-.5.5zM14.5 14.5c-.276 0-.5-.224-.5-.5 0-.276.224-.5.5-.5.276 0 .5.224.5.5 0 .276-.224.5-.5.5z" />
+                </svg>
+              )}
+            </button>
+            <button
+              type="button"
               onClick={() => handleOAuthLogin('google')}
               disabled={oauthLoading !== null}
               className="flex items-center justify-center p-3 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-50"
@@ -290,36 +324,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               ) : (
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
                   <path fill="#181717" d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-                </svg>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleOAuthLogin('wechat')}
-              disabled={oauthLoading !== null}
-              className="flex items-center justify-center p-3 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-50"
-              title="微信登录"
-            >
-              {oauthLoading === 'wechat' ? (
-                <div className="animate-spin h-5 w-5 border-2 border-green-600 border-t-transparent rounded-full"></div>
-              ) : (
-                <svg className="w-5 h-5" viewBox="0 0 24 24">
-                  <path fill="#07C160" d="M8.5 10.5c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1zm7 0c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1zM12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm-2.5 14.5c-.276 0-.5-.224-.5-.5 0-.276.224-.5.5-.5.276 0 .5.224.5.5 0 .276-.224.5-.5.5zM14.5 14.5c-.276 0-.5-.224-.5-.5 0-.276.224-.5.5-.5.276 0 .5.224.5.5 0 .276-.224.5-.5.5z" />
-                </svg>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleOAuthLogin('qq')}
-              disabled={oauthLoading !== null}
-              className="flex items-center justify-center p-3 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-50"
-              title="QQ登录"
-            >
-              {oauthLoading === 'qq' ? (
-                <div className="animate-spin h-5 w-5 border-2 border-blue-600 border-t-transparent rounded-full"></div>
-              ) : (
-                <svg className="w-5 h-5" viewBox="0 0 24 24">
-                  <path fill="#12B7F5" d="M21.395 15.035a39.548 39.548 0 0 0-.803-2.264l-1.079-2.695c.001-.032.014-.562.014-.836C19.527 4.731 16.776 0 12 0S4.473 4.731 4.473 9.24c0 .274.013.804.014.836l-1.08 2.695a38.97 38.97 0 0 0-.802 2.264c-1.021 3.283-.69 4.602-.438 4.79.249.187 1.945.399 4.848.399.32 0 .642-.002.964-.008l.626 2.758c.03.134.135.243.27.28.135.036.276 0 .382-.093l2.743-2.425 2.743 2.425c.09.08.21.119.33.119.045 0 .091-.006.135-.018.135-.037.24-.146.27-.28l.626-2.758c.322.006.644.008.964.008 2.903 0 4.599-.212 4.848-.399.251-.188.582-1.507-.439-4.79z" />
                 </svg>
               )}
             </button>
